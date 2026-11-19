@@ -1,0 +1,98 @@
+/* ==========================================================================
+   SCHEFF OF STAFF — DESIGN TOKENS
+   --------------------------------------------------------------------------
+   Canonical source for color, spacing, and typography tokens.
+   See design/brand.md for the narrative ("why" each token exists).
+
+   Every downstream consumer (SPA, future re-skinned Open WebUI, email
+   templates) imports from this file so palette evolution happens once.
+   ========================================================================== */
+
+/* ─── Editorial display face ──────────────────────────────────────────────
+   Vollkorn — variable font, Latin subset only. Loaded once here and
+   applied via var(--font-display) scoped to display headings only
+   (article title, page titles, markdown H1/H2/H3). See DESIGN.md's
+   Three-Family Rule for the scoping doctrine.
+
+   Self-hosted under spa/static/fonts/, embedded into the Go binary via
+   //go:embed static — no CDN, no third-party network calls, no font
+   loading UX shift when the tailnet is offline. font-display: swap so
+   the system serif fallback (Iowan Old Style / Georgia) renders
+   immediately and Vollkorn swaps in when ready. */
+@font-face {
+    font-family: 'Vollkorn';
+    font-style: normal;
+    font-weight: 400 900;
+    font-display: swap;
+    src: url('/static/fonts/Vollkorn-variable-latin.woff2') format('woff2-variations');
+}
+@font-face {
+    font-family: 'Vollkorn';
+    font-style: italic;
+    font-weight: 400 900;
+    font-display: swap;
+    src: url('/static/fonts/Vollkorn-italic-variable-latin.woff2') format('woff2-variations');
+}
+
+:root {
+    /* ─── Palette ─────────────────────────────────────────────────────── */
+    --color-primary: #122C42;          /* Midnight Trail Blue */
+    --color-accent: #F05A28;           /* Adrenaline Orange */
+    --color-accent-hover: #d94d1f;     /* Hover state for accent elements */
+    --color-bg-base: #FFFFFF;          /* Fresh Powder White */
+    --color-bg-sec: #E2E8F0;           /* Frostbite Grey */
+    --color-text-main: #1A202C;        /* Carbon Black */
+    --color-text-light: #F8FAFC;       /* Off-white for dark backgrounds */
+
+    /* Derived / semantic aliases. Use these in components — they let us
+       retheme without renaming everything. */
+    --color-text-muted: #5C6776;       /* Mid-grey for secondary text */
+    --color-border: #CBD5E0;           /* Subtle dividers */
+    --color-card-bg: var(--color-bg-base);
+    --color-page-bg: var(--color-bg-base);
+    --color-nav-bg: var(--color-primary);
+    --color-nav-text: var(--color-text-light);
+
+    /* ─── Typography ──────────────────────────────────────────────────── */
+    --font-sans:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    --font-mono:
+        ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
+    /* Editorial display face — Vollkorn, self-hosted variable font. Scoped
+       to display headings only (see DESIGN.md's Three-Family Rule). System
+       serif fallback renders instantly; Vollkorn swaps in without layout
+       shift because font-metrics are close. */
+    --font-display:
+        "Vollkorn", "Iowan Old Style", "Palatino Linotype", Palatino,
+        Georgia, "Times New Roman", serif;
+
+    --font-weight-body: 400;
+    --font-weight-heading: 600;
+
+    /* ─── Spacing scale (4px base) ────────────────────────────────────── */
+    --space-1: 0.25rem;     /* 4px */
+    --space-2: 0.5rem;      /* 8px */
+    --space-3: 0.75rem;     /* 12px */
+    --space-4: 1rem;        /* 16px */
+    --space-6: 1.5rem;      /* 24px */
+    --space-8: 2rem;        /* 32px */
+    --space-12: 3rem;       /* 48px */
+    --space-16: 4rem;       /* 64px */
+
+    /* ─── Radii ──────────────────────────────────────────────────────── */
+    --radius-sm: 4px;
+    --radius-md: 8px;       /* default for cards, buttons */
+    --radius-lg: 16px;
+    --radius-full: 9999px;
+
+    /* ─── Shadows ────────────────────────────────────────────────────── */
+    --shadow-card: 0 1px 3px rgba(18, 44, 66, 0.06),
+                   0 1px 2px rgba(18, 44, 66, 0.04);
+    --shadow-card-hover: 0 4px 12px rgba(18, 44, 66, 0.08);
+
+    /* ─── Layout caps ─────────────────────────────────────────────────── */
+    --layout-max-content: 920px;       /* Reading-friendly column width */
+    --layout-max-wide: 1200px;         /* Dashboards / multi-column */
+}

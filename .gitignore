@@ -1,9 +1,10 @@
-/bin/
-/scheff-writer
-.env
 *.env
+.env
 !config.example.env
-*.test
 *.out
+*.test
 .DS_Store
 .vscode/
+/bin/
+/scheff-writer
+example/

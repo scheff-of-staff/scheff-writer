@@ -11,9 +11,49 @@ by pointing it at the vault, where it owns each project's body and
 its `sources/`, `revisions/`, `attachments/` and `chat.md`
 (see the Scheff contracts, §1 and §3).
 
-**Status: P2a, the storage layer.** The project folder format, scoped
-writes and tests are in place. The web service, editor UI, Transform,
-chat and forager-backed source ingest follow (P2b–P2d).
+**Status: 0.1.0.** Editor, preview, autosave and revision history,
+Transform, chat, image paste and source removal work. Adding new
+sources (fetched through forager) arrives in the next release; until
+then the add-source form reports that it isn't available yet.
+
+## Run it
+
+Locally, against any folder, with no sign-in (localhost only):
+
+```
+make run ROOT=~/writing
+```
+
+Then open http://127.0.0.1:8445. For Transform and chat, also set
+`WRITER_LLM_URL`, `WRITER_LLM_KEY` and `WRITER_MODEL`
+(see [config.example.env](config.example.env)).
+
+As a container:
+
+```
+docker run --rm -p 127.0.0.1:8445:8445 \
+  -e WRITER_ROOT=/data -e WRITER_TOKEN="$(openssl rand -hex 24)" \
+  -e WRITER_LLM_URL=... -e WRITER_LLM_KEY=... -e WRITER_MODEL=... \
+  -v ~/writing:/data ghcr.io/scheff-of-staff/scheff-writer:0.1.0
+```
+
+The container runs as a non-root user; give it a uid that can write
+the mounted folder (`--user 1000:1000` or similar).
+
+## Security
+
+- **Sign-in is required** unless `WRITER_ALLOW_NO_AUTH=1` is set
+  explicitly. Browsers sign in once with the token and get an
+  HttpOnly, SameSite=Strict, Secure cookie holding an HMAC of the
+  token, not the token itself. Other services send
+  `Authorization: Bearer <token>`.
+- **Cross-site writes are refused** (Go's `CrossOriginProtection`), so
+  another web page can't post into the editor's API.
+- **Drafts are untrusted input to the model.** The prompts say so, and
+  neither Transform nor chat writes anything on the model's say-so:
+  Transform output is shown for review, and only Accept saves it.
+- Run it behind TLS (Tailscale Serve, a reverse proxy) on a private
+  network. It is a single-author tool, not a multi-user service.
 
 ## Folder layout
 
@@ -44,7 +84,8 @@ Rules the store enforces:
 go test ./...
 ```
 
-No third-party dependencies.
+One third-party dependency: [goldmark](https://github.com/yuin/goldmark)
+(MIT), pinned, for Markdown rendering with raw HTML disabled.
 
 ## License
 

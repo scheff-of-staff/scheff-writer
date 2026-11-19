@@ -1,0 +1,3048 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{.Title}} — Scheff Writer</title>
+    <link rel="icon" href="/static/favicon.png">
+    <link rel="stylesheet" href="/static/tokens.css">
+    <style>
+        body {
+            font-family: var(--font-sans);
+            background: var(--color-page-bg);
+            color: var(--color-text-main);
+            margin: 0;
+            min-height: 100vh;
+            line-height: 1.55;
+        }
+        header.site {
+            background: var(--color-nav-bg);
+            color: var(--color-nav-text);
+            padding: var(--space-3) var(--space-6);
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+        }
+        header.site img.logo { width: 32px; height: 32px; display: block; }
+        header.site h1 {
+            font-size: 1.05rem;
+            font-weight: var(--font-weight-heading);
+            margin: 0;
+        }
+        header.site nav { margin-left: auto; display: flex; gap: var(--space-4); font-size: 0.9rem; }
+        header.site nav a { color: var(--color-nav-text); text-decoration: none; opacity: 0.85; }
+        header.site nav a:hover { opacity: 1; text-decoration: underline; }
+
+        main {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: var(--space-4) var(--space-6) var(--space-6);
+        }
+
+        .article-toolbar {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+            padding: var(--space-3) 0;
+            border-bottom: 1px solid var(--color-border);
+            margin-bottom: var(--space-4);
+        }
+        .article-toolbar .article-title {
+            font-family: var(--font-display);
+            font-size: 1.35rem;
+            font-weight: 500;
+            letter-spacing: -0.01em;
+            color: var(--color-primary);
+            margin: 0;
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .article-toolbar .project-slug {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            background: var(--color-bg-sec);
+            padding: 0.1em 0.5em;
+            border-radius: var(--radius-sm);
+            color: var(--color-text-muted);
+        }
+        .article-toolbar .actions {
+            display: flex;
+            gap: var(--space-2);
+            align-items: center;
+        }
+        .article-toolbar button {
+            font: inherit;
+            font-size: 0.85rem;
+            padding: var(--space-1) var(--space-3);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            cursor: pointer;
+            line-height: 1.4;
+        }
+        .article-toolbar button:hover { background: var(--color-bg-sec); }
+        .article-toolbar button.primary {
+            background: var(--color-accent);
+            color: var(--color-bg-base);
+            border-color: var(--color-accent);
+        }
+        .article-toolbar button.primary:hover { background: var(--color-accent-hover); }
+        /* save-result span is only used by htmx to receive the save
+           response fragment; we drive user feedback via the status bar
+           now, so hide the raw fragment entirely. */
+        .article-toolbar .save-result { display: none; }
+
+        /* Dropdown menus (Export ▾ / More ⋯). Menu anchors relative
+           to its wrapper, drops down right-aligned to the button. */
+        .menu-wrap { position: relative; display: inline-block; }
+        .menu-btn { white-space: nowrap; }
+        .menu-btn[aria-expanded="true"] {
+            background: var(--color-bg-sec);
+            border-color: var(--color-border);
+        }
+        .article-toolbar .menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            min-width: 210px;
+            padding: var(--space-1) 0;
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+        }
+        .article-toolbar .menu[hidden] { display: none; }
+        .article-toolbar .menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: var(--space-2) var(--space-4);
+            border: none;
+            background: none;
+            font: inherit;
+            font-size: 0.9rem;
+            color: var(--color-text-main);
+            border-radius: 0;
+            cursor: pointer;
+        }
+        .article-toolbar .menu button:hover { background: var(--color-bg-sec); }
+
+        /* Bottom status bar — Word/VSCode-style. Left: save state
+           dot + text. Middle: writing metrics. Right: model/context.
+           All state that used to sit in the toolbar and change label
+           (autosave: ready → unsaved changes → saving → saved) now
+           lives here, off the plane of primary actions. */
+        .article-statusbar {
+            position: sticky;
+            bottom: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--space-4);
+            padding: var(--space-2) var(--space-6);
+            margin-top: var(--space-4);
+            background: var(--color-bg-sec);
+            border-top: 1px solid var(--color-border);
+            box-shadow: 0 -2px 6px rgba(18, 44, 66, 0.06);
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .statusbar-left,
+        .statusbar-mid,
+        .statusbar-right {
+            display: flex;
+            gap: var(--space-3);
+            align-items: center;
+        }
+        .statusbar-mid { flex: 1 1 auto; justify-content: center; }
+        .statusbar-sep { opacity: 0.5; }
+        .statusbar-model {
+            font-family: var(--font-mono);
+            padding: 0.1em 0.5em;
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+        }
+        .autosave-status {
+            display: inline-flex;
+            gap: 0.4em;
+            align-items: center;
+            cursor: help;
+            font-variant-numeric: tabular-nums;
+        }
+        .autosave-status .save-dot {
+            width: 0.6em;
+            height: 0.6em;
+            border-radius: 50%;
+            background: var(--color-text-muted);
+            display: inline-block;
+            flex-shrink: 0;
+            transition: background 0.15s ease;
+        }
+        .autosave-status.dirty  .save-dot { background: #f97316; }
+        .autosave-status.saving .save-dot { background: #2563eb; }
+        .autosave-status.saved  .save-dot { background: #16a34a; }
+        .autosave-status.dirty  .save-text { color: #9a3412; }
+        .autosave-status.saving .save-text { color: #1d4ed8; }
+        .autosave-status.saved  .save-text { color: #166534; }
+
+        @media (max-width: 700px) {
+            .article-statusbar { flex-wrap: wrap; padding: var(--space-2) var(--space-3); }
+            .statusbar-mid { justify-content: flex-start; flex: 1 1 100%; order: 3; }
+            .statusbar-right { flex: 0 0 auto; }
+            /* Touch targets ≥ 44×44px for mobile use (WCAG 2.5.5). */
+            .article-toolbar button,
+            .article-toolbar .menu button {
+                min-height: 44px;
+                padding: var(--space-2) var(--space-3);
+            }
+        }
+
+        .article-workspace {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-4);
+            height: calc(100vh - 160px);
+            min-height: 480px;
+        }
+        .article-editor,
+        .article-preview {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-card);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .article-editor:focus-within {
+            border-color: var(--color-primary);
+            box-shadow: var(--shadow-card), 0 0 0 3px rgba(18, 44, 66, 0.12);
+        }
+        .pane-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--color-text-muted);
+            padding: var(--space-2) var(--space-4);
+            background: var(--color-bg-sec);
+            border-bottom: 1px solid var(--color-border);
+        }
+        .article-editor textarea {
+            flex: 1 1 auto;
+            width: 100%;
+            border: none;
+            outline: none;
+            resize: none;
+            padding: var(--space-4) var(--space-5);
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            line-height: 1.65;
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            box-sizing: border-box;
+        }
+        /* Markdown toolbar — sits between the pane-label and the
+           textarea. Each button wraps the current selection in MD
+           syntax (handled in JS by applyMdAction). Keyboard
+           shortcuts: Cmd/Ctrl+B (bold), Cmd/Ctrl+I (italic),
+           Cmd/Ctrl+K (link). */
+        .md-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-3);
+            background: var(--color-bg-sec);
+            border-bottom: 1px solid var(--color-border);
+            cursor: help;
+        }
+        .md-toolbar button {
+            font: inherit;
+            font-size: 0.85rem;
+            min-width: 2em;
+            padding: 0.15em 0.5em;
+            border: 1px solid transparent;
+            border-radius: var(--radius-sm);
+            background: transparent;
+            color: var(--color-text-main);
+            cursor: pointer;
+            line-height: 1.2;
+        }
+        .md-toolbar button:hover {
+            background: var(--color-card-bg);
+            border-color: var(--color-border);
+        }
+        .md-toolbar button:active {
+            background: var(--color-accent);
+            color: var(--color-bg-base);
+            border-color: var(--color-accent);
+        }
+        .md-tool-sep {
+            display: inline-block;
+            width: 1px;
+            height: 1.1em;
+            background: var(--color-border);
+            margin: 0 var(--space-1);
+        }
+        .article-preview .preview-body {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: var(--space-4) var(--space-5);
+        }
+
+        /* Markdown styling — keep in step with project.html so the preview
+           matches the rendered project-page body. */
+        .markdown-body h1,
+        .markdown-body h2,
+        .markdown-body h3 {
+            font-family: var(--font-display);
+            color: var(--color-primary);
+            font-weight: 500;
+            letter-spacing: -0.015em;
+            margin-top: var(--space-5);
+            margin-bottom: var(--space-3);
+            text-wrap: balance;
+        }
+        .markdown-body h1 { font-size: 2rem; line-height: 1.15; }
+        .markdown-body h2 { font-size: 1.5rem; line-height: 1.2; }
+        .markdown-body h3 { font-size: 1.2rem; line-height: 1.25; }
+        .markdown-body h1:first-child,
+        .markdown-body h2:first-child,
+        .markdown-body h3:first-child { margin-top: 0; }
+        .markdown-body p { margin: var(--space-3) 0; }
+        .markdown-body ul, .markdown-body ol { padding-left: 1.5em; }
+        .markdown-body li { margin: var(--space-2) 0; }
+        .markdown-body blockquote {
+            margin: var(--space-3) 0;
+            padding: var(--space-2) var(--space-4);
+            border-left: 3px solid var(--color-border);
+            color: var(--color-text-muted);
+            font-style: italic;
+        }
+        .markdown-body a { color: var(--color-primary); text-decoration: underline; }
+        .markdown-body a:hover { color: var(--color-accent); }
+        .markdown-body code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-sec);
+            padding: 0.1em 0.4em;
+            border-radius: var(--radius-sm);
+            font-size: 0.92em;
+        }
+        .markdown-body pre {
+            background: var(--color-bg-sec);
+            padding: var(--space-3);
+            border-radius: var(--radius-sm);
+            overflow-x: auto;
+        }
+        .markdown-body pre code { background: none; padding: 0; }
+        /* Images in the preview + chat bubbles + rendered article
+           surfaces. Constrain to the pane so a screenshot at
+           laptop-res doesn't overflow horizontally, and give a subtle
+           frame so pasted screenshots don't blend into the background. */
+        .markdown-body img {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin: var(--space-3) 0;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            background: var(--color-card-bg);
+            box-shadow: 0 1px 3px rgba(18, 44, 66, 0.06);
+        }
+
+        @media (max-width: 900px) {
+            .article-workspace {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            .article-editor textarea { min-height: 50vh; }
+            .article-preview .preview-body { min-height: 40vh; }
+            .article-rightpane { min-height: 60vh; }
+        }
+
+        /* Right pane is now tabbed: Preview | Chat. The article-preview
+           container becomes article-rightpane; preview is one of two
+           tab panels inside. */
+        .article-rightpane {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-card);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        /* File-folder tab bar. Each tab sits IN the bg-sec strip; the
+           active tab draws its own 1px border on top/left/right and a
+           1px bottom border colored to match the pane below, which
+           makes it look like the tab "opens into" the pane. Inactive
+           tabs are borderless and recessed. */
+        .tab-bar {
+            display: flex;
+            gap: 3px;
+            padding: 6px 8px 0;
+            background: var(--color-bg-sec);
+            border-bottom: 1px solid var(--color-border);
+        }
+        .tab-bar button.tab {
+            font: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--color-text-muted);
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 6px 6px 0 0;
+            padding: var(--space-2) var(--space-4);
+            cursor: pointer;
+            margin-bottom: -1px;
+            transition: color 150ms, background 150ms;
+        }
+        .tab-bar button.tab:hover {
+            color: var(--color-primary);
+            background: rgba(255, 255, 255, 0.55);
+        }
+        .tab-bar button.tab.active {
+            color: var(--color-primary);
+            background: var(--color-card-bg);
+            border-top-color: var(--color-border);
+            border-left-color: var(--color-border);
+            border-right-color: var(--color-border);
+            border-bottom-color: var(--color-card-bg);
+            font-weight: 600;
+            cursor: default;
+        }
+        .tab-bar .tab-badge {
+            background: var(--color-accent);
+            color: #fff;
+            font-size: 0.7rem;
+            padding: 0.1em 0.5em;
+            border-radius: var(--radius-full);
+            margin-left: var(--space-2);
+            font-weight: 700;
+        }
+        .tab-panel { display: none; flex: 1 1 auto; flex-direction: column; min-height: 0; overflow: hidden; }
+        .tab-panel.active { display: flex; }
+
+        /* Preview panel inherits the previous markdown-body styling. */
+        .tab-panel.preview-panel .preview-body {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: var(--space-4) var(--space-5);
+        }
+
+        /* Chat panel — message log on top, input at bottom. */
+        .chat-messages {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: var(--space-3) var(--space-4);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+        }
+        .chat-empty {
+            color: var(--color-text-muted);
+            font-style: italic;
+            text-align: center;
+            padding: var(--space-6) var(--space-4);
+        }
+        .chat-bubble {
+            max-width: 92%;
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-md);
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .chat-bubble.chat-user {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #1e293b;
+            align-self: flex-end;
+        }
+        .chat-bubble.chat-user .bubble-content {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .chat-bubble.chat-assistant {
+            background: var(--color-bg-sec);
+            border: 1px solid var(--color-border);
+            color: var(--color-text-main);
+            align-self: flex-start;
+        }
+        .chat-bubble.chat-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            align-self: stretch;
+            text-align: center;
+        }
+        /* Thinking placeholder — assistant-side bubble with animated
+           dots, replaces server response when it lands. Gives the
+           operator immediate "I'm working" feedback while the LLM
+           call is in flight. */
+        .chat-bubble.chat-thinking-bubble {
+            background: var(--color-bg-sec);
+            border: 1px dashed var(--color-border);
+            color: var(--color-text-muted);
+        }
+        .thinking-dots {
+            display: inline-flex;
+            gap: 0.25em;
+            padding: 0.3em 0;
+        }
+        .thinking-dots span {
+            display: inline-block;
+            width: 0.45em;
+            height: 0.45em;
+            background: var(--color-text-muted);
+            border-radius: 50%;
+            animation: thinking-bounce 1.2s infinite ease-in-out;
+        }
+        .thinking-dots span:nth-child(2) { animation-delay: 0.18s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0.36s; }
+        @keyframes thinking-bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        .chat-bubble .bubble-meta {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-bottom: var(--space-1);
+            font-variant-numeric: tabular-nums;
+        }
+        .chat-bubble .bubble-meta .warn { color: #b45309; font-style: italic; text-transform: none; letter-spacing: normal; }
+        /* 'context loaded: N src (18KB) · profile 2KB · …' — smaller
+           and lighter than the model/token line above it so the
+           operator can glance at it without it stealing focus from
+           the reply itself. Hoverable for the tooltip explanation. */
+        .chat-bubble .bubble-meta.context-meta {
+            font-size: 0.65rem;
+            letter-spacing: 0.04em;
+            opacity: 0.7;
+            cursor: help;
+            margin-top: 2px;
+        }
+        .chat-bubble .bubble-content.markdown-body p:first-child { margin-top: 0; }
+        .chat-bubble .bubble-content.markdown-body p:last-child { margin-bottom: 0; }
+        .chat-bubble .bubble-content.markdown-body h1,
+        .chat-bubble .bubble-content.markdown-body h2,
+        .chat-bubble .bubble-content.markdown-body h3 {
+            font-size: 1rem;
+            margin-top: var(--space-2);
+            margin-bottom: var(--space-2);
+        }
+        .chat-bubble .bubble-actions {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
+            padding-top: var(--space-2);
+            border-top: 1px dashed var(--color-border);
+        }
+        .chat-bubble .bubble-actions button {
+            font: inherit;
+            font-size: 0.75rem;
+            padding: 0.15em 0.6em;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-muted);
+            cursor: pointer;
+        }
+        .chat-bubble .bubble-actions button:hover { background: var(--color-bg-sec); color: var(--color-primary); }
+
+        .chat-input {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+            padding: var(--space-3) var(--space-4);
+            border-top: 1px solid var(--color-border);
+            background: var(--color-card-bg);
+        }
+        .chat-input textarea {
+            font: inherit;
+            font-size: 0.92rem;
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            resize: vertical;
+            min-height: 4.5em;
+            line-height: 1.5;
+        }
+        .chat-input .chat-input-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--space-3);
+        }
+        .chat-input button.send {
+            font: inherit;
+            font-size: 0.9rem;
+            padding: var(--space-1) var(--space-4);
+            border: 1px solid var(--color-accent);
+            border-radius: var(--radius-sm);
+            background: var(--color-accent);
+            color: var(--color-bg-base);
+            cursor: pointer;
+        }
+        .chat-input button.send:hover { background: var(--color-accent-hover); }
+        .chat-input button.send:disabled { opacity: 0.5; cursor: wait; }
+        .chat-input .chat-thinking { display: none; font-size: 0.8rem; color: var(--color-text-muted); font-style: italic; }
+        .chat-input .htmx-request .chat-thinking { display: inline; }
+        .chat-input .htmx-request button.send { opacity: 0.5; pointer-events: none; }
+        .chat-input .chat-reset {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+        }
+        .chat-input .chat-reset:hover { color: #991b1b; }
+        .chat-input .chat-reset-result { font-size: 0.78rem; color: var(--color-text-muted); }
+        /* Chat attachment strip — thumbnails of pasted images that
+           will be sent alongside the text on the next Send. Each
+           thumb has an × to remove before sending. */
+        .chat-input .chat-attach-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            padding: var(--space-2) 0 0;
+        }
+        .chat-input .chat-attach-strip[hidden] { display: none; }
+        .chat-input .chat-attach-thumb {
+            position: relative;
+            width: 64px;
+            height: 64px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            background: var(--color-bg-sec);
+        }
+        .chat-input .chat-attach-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .chat-input .chat-attach-thumb.uploading {
+            opacity: 0.55;
+        }
+        .chat-input .chat-attach-thumb.uploading::after {
+            content: "…";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            color: var(--color-text-muted);
+        }
+        .chat-input .chat-attach-thumb .thumb-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-size: 0.7rem;
+            line-height: 1;
+            cursor: pointer;
+            padding: 0;
+        }
+        .chat-input .chat-attach-thumb .thumb-remove:hover { background: rgba(220, 38, 38, 0.85); }
+
+        /* Sources tab — list of attached research sources + add forms.
+           Each source is a card: title (linked to URL if any), excerpt,
+           metadata (kind + added timestamp), remove button. */
+        .sources-list {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: var(--space-3) var(--space-4);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+        }
+        .source-card {
+            background: var(--color-bg-sec);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            padding: var(--space-2) var(--space-3);
+            font-size: 0.88rem;
+        }
+        .source-card .source-title {
+            font-weight: 600;
+            color: var(--color-primary);
+            margin-bottom: var(--space-1);
+        }
+        .source-card .source-title a {
+            color: var(--color-accent);
+            text-decoration: none;
+        }
+        .source-card .source-title a:hover { text-decoration: underline; }
+        .source-card .source-meta {
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+            margin-bottom: var(--space-1);
+        }
+        .source-card .source-meta .kind-pill {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            padding: 0.05em 0.5em;
+            border-radius: var(--radius-full);
+            font-family: var(--font-mono);
+            text-transform: lowercase;
+            letter-spacing: normal;
+            margin-right: var(--space-1);
+        }
+        .source-card .source-excerpt {
+            color: var(--color-text-muted);
+            line-height: 1.5;
+            margin-bottom: var(--space-2);
+        }
+        .source-card .source-actions {
+            display: flex;
+            gap: var(--space-2);
+        }
+        .source-card .source-actions form { margin: 0; }
+        .source-card button.source-remove {
+            font: inherit;
+            font-size: 0.75rem;
+            padding: 0.15em 0.6em;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-muted);
+            cursor: pointer;
+        }
+        .source-card button.source-remove:hover { color: #991b1b; border-color: #fecaca; }
+
+        .sources-add {
+            border-top: 1px solid var(--color-border);
+            background: var(--color-card-bg);
+            padding: var(--space-3) var(--space-4);
+        }
+        /* Segmented-control (iOS-style) — 3 kinds share a grey pill.
+           Active kind "pops" out with white bg + subtle shadow. This
+           is a form control (pick a sub-form), not the same metaphor
+           as the file-folder .tab-bar in the right pane. */
+        .sources-add .kind-tabs {
+            display: inline-flex;
+            gap: 2px;
+            background: var(--color-bg-sec);
+            border-radius: var(--radius-sm);
+            padding: 3px;
+            margin-bottom: var(--space-3);
+        }
+        .sources-add .kind-tab {
+            font: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--color-text-muted);
+            background: transparent;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 12px;
+            cursor: pointer;
+            transition: color 150ms, background 150ms, box-shadow 150ms;
+        }
+        .sources-add .kind-tab:hover {
+            color: var(--color-primary);
+        }
+        .sources-add .kind-tab.active {
+            color: var(--color-primary);
+            background: var(--color-card-bg);
+            box-shadow: 0 1px 2px rgba(18, 44, 66, 0.08);
+            cursor: default;
+        }
+        .sources-add form { display: none; flex-direction: column; gap: var(--space-2); }
+        .sources-add form.active { display: flex; }
+        .sources-add input[type=url],
+        .sources-add input[type=text],
+        .sources-add textarea {
+            font: inherit;
+            font-size: 0.88rem;
+            padding: var(--space-1) var(--space-2);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+        }
+        .sources-add textarea {
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            resize: vertical;
+            min-height: 6em;
+            line-height: 1.5;
+        }
+        .sources-add button.add {
+            font: inherit;
+            font-size: 0.85rem;
+            padding: var(--space-1) var(--space-3);
+            border: 1px solid var(--color-accent);
+            border-radius: var(--radius-sm);
+            background: var(--color-accent);
+            color: var(--color-bg-base);
+            cursor: pointer;
+            align-self: flex-start;
+        }
+        .sources-add button.add:hover { background: var(--color-accent-hover); }
+        .sources-add .add-thinking { display: none; font-size: 0.8rem; color: var(--color-text-muted); font-style: italic; }
+        .sources-add .htmx-request .add-thinking { display: inline; }
+        .sources-add .htmx-request button.add { opacity: 0.5; pointer-events: none; }
+        .sources-add .add-result { font-size: 0.85rem; }
+        .sources-empty {
+            color: var(--color-text-muted);
+            font-style: italic;
+            text-align: center;
+            padding: var(--space-6) var(--space-4);
+        }
+        /* Model + Depth row on the add-source form. Two side-by-side
+           labels with select dropdowns. Compact so it doesn't dominate
+           the form. */
+        .sources-add .model-depth-row {
+            display: flex;
+            gap: var(--space-3);
+            flex-wrap: wrap;
+        }
+        .sources-add .ingest-knob {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-1);
+            flex: 1 1 12em;
+            min-width: 12em;
+        }
+        .sources-add .knob-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--color-text-muted);
+            cursor: help;
+        }
+        .sources-add .ingest-knob select {
+            font: inherit;
+            font-size: 0.85rem;
+            padding: var(--space-1) var(--space-2);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+        }
+        /* Source card surfaces the model/depth used for that source so
+           the operator can audit and decide to re-ingest. */
+        .source-card .source-meta .model-pill,
+        .source-card .source-meta .depth-pill {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            padding: 0.05em 0.5em;
+            border-radius: var(--radius-full);
+            font-family: var(--font-mono);
+            text-transform: lowercase;
+            letter-spacing: normal;
+            margin-right: var(--space-1);
+        }
+        .source-card .source-meta .depth-pill.clamped {
+            background: #fff7ed;
+            border-color: #fdba74;
+            color: #9a3412;
+        }
+
+        /* Transform button — distinct color so operator notices the
+           "polish this" action vs. the routine Save. */
+        .article-toolbar button.transform {
+            background: #7C3AED;
+            color: #fff;
+            border-color: #7C3AED;
+        }
+        .article-toolbar button.transform:hover { background: #6d28d9; }
+        .article-toolbar button.transform:disabled { opacity: 0.5; cursor: wait; }
+        .article-toolbar .htmx-indicator { display: none; font-size: 0.8rem; color: var(--color-text-muted); }
+        .article-toolbar .htmx-request .htmx-indicator { display: inline; }
+        .article-toolbar .htmx-request button.transform { opacity: 0.5; pointer-events: none; }
+
+        /* Polished pane — appears below the workspace after Transform.
+           Operator reads, then Accept (replaces editor content) or
+           Discard. Save is a separate explicit step. */
+        /* Polished modal. Was previously an inline .polished-pane below
+           the workspace; on tall workspaces (100vh) that put the polished
+           output off-screen — the operator had to scroll to see it. Now it opens
+           over the workspace, same shell as .history-modal. */
+        .polished-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .polished-modal[hidden] { display: none; }
+        .polished-modal .polished-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.4);
+        }
+        .polished-modal .polished-panel {
+            position: relative;
+            background: var(--color-card-bg);
+            border: 1px solid #7C3AED;
+            border-radius: var(--radius-md);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1100px;
+            width: 92%;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .polished-modal .polished-close {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            z-index: 5;
+            font: inherit;
+            font-size: 1.5rem;
+            line-height: 1;
+            padding: 4px 8px;
+            border: none;
+            background: transparent;
+            color: #6d28d9;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+        }
+        .polished-modal .polished-close:hover { background: rgba(124, 58, 237, 0.1); }
+
+        /* State machine — modal has one of loading / error / content.
+           Only the matching pane is shown so the modal opens with a
+           spinner immediately on click, swaps to content when the LLM
+           returns, or swaps to error if the request fails. Prevents
+           the "click and see nothing" feedback gap the operator flagged. */
+        .polished-modal[data-state="loading"] .polished-loading { display: block; }
+        .polished-modal[data-state="loading"] .polished-error,
+        .polished-modal[data-state="loading"] #polished-content { display: none; }
+        .polished-modal[data-state="error"] .polished-error { display: block; }
+        .polished-modal[data-state="error"] .polished-loading,
+        .polished-modal[data-state="error"] #polished-content { display: none; }
+        .polished-modal[data-state="content"] #polished-content { display: block; }
+        .polished-modal[data-state="content"] .polished-loading,
+        .polished-modal[data-state="content"] .polished-error { display: none; }
+        /* Default (data-state absent or idle) — hide the loading + error
+           panes so mounting the empty modal by accident is a no-op. */
+        .polished-modal:not([data-state="loading"]) .polished-loading,
+        .polished-modal:not([data-state="error"]) .polished-error { display: none; }
+
+        .polished-loading {
+            padding: var(--space-12) var(--space-8);
+            text-align: center;
+            color: var(--color-text-main);
+        }
+        .polished-loading .spinner {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto var(--space-4);
+            border: 3px solid rgba(124, 58, 237, 0.15);
+            border-top-color: #7C3AED;
+            border-radius: 50%;
+            animation: polishedSpin 900ms linear infinite;
+        }
+        @keyframes polishedSpin {
+            to { transform: rotate(360deg); }
+        }
+        .polished-loading .loading-title {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: #6d28d9;
+            margin: 0 0 var(--space-2);
+        }
+        .polished-loading .loading-hint {
+            color: var(--color-text-muted);
+            font-size: 0.9rem;
+            margin: 0 0 var(--space-2);
+        }
+        .polished-loading .loading-elapsed {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            margin: 0 0 var(--space-6);
+            font-variant-numeric: tabular-nums;
+        }
+        .polished-loading .polished-cancel {
+            font: inherit;
+            font-size: 0.9rem;
+            padding: 8px 20px;
+            border: 1px solid var(--color-border);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+        }
+        .polished-loading .polished-cancel:hover {
+            background: var(--color-bg-sec);
+            border-color: var(--color-text-muted);
+        }
+
+        .polished-error {
+            padding: var(--space-10) var(--space-8);
+            text-align: center;
+        }
+        .polished-error .error-title {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 500;
+            color: #991b1b;
+            margin: 0 0 var(--space-2);
+        }
+        .polished-error .error-message {
+            color: var(--color-text-main);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            background: var(--color-bg-sec);
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-sm);
+            margin: var(--space-3) auto var(--space-6);
+            max-width: 700px;
+            text-align: left;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .polished-error .error-close {
+            font: inherit;
+            font-size: 0.9rem;
+            padding: 8px 20px;
+            border: 1px solid var(--color-border);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+        }
+        .polished-pane {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            flex: 1 1 auto;
+        }
+        .polished-pane .polished-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: var(--space-3);
+            padding: var(--space-3) var(--space-5);
+            background: #f5f3ff;
+            border-bottom: 1px solid #ddd6fe;
+        }
+        .polished-pane .polished-header .pane-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #6d28d9;
+            padding: 0;
+            background: none;
+            border: none;
+        }
+        .polished-pane .polished-meta {
+            font-size: 0.8rem;
+            color: var(--color-text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .polished-pane .polished-meta code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-sec);
+            padding: 0.05em 0.4em;
+            border-radius: var(--radius-sm);
+        }
+        .polished-pane .polished-meta .warn {
+            color: #b45309;
+            font-style: italic;
+        }
+        .polished-pane .polished-actions {
+            margin-left: auto;
+            display: flex;
+            gap: var(--space-2);
+        }
+        .polished-pane .polished-actions button {
+            font: inherit;
+            font-size: 0.85rem;
+            padding: var(--space-1) var(--space-3);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            cursor: pointer;
+        }
+        .polished-pane .polished-actions button:hover { background: var(--color-bg-sec); }
+        .polished-pane .polished-actions button.primary {
+            background: #7C3AED;
+            color: #fff;
+            border-color: #7C3AED;
+        }
+        .polished-pane .polished-actions button.primary:hover { background: #6d28d9; }
+        .polished-pane .polished-rendered {
+            padding: var(--space-5);
+            flex: 1 1 auto;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .polished-pane details {
+            border-top: 1px solid var(--color-border);
+        }
+        .polished-pane details > summary {
+            cursor: pointer;
+            list-style: none;
+            padding: var(--space-2) var(--space-5);
+            font-size: 0.8rem;
+            color: var(--color-text-muted);
+            background: var(--color-bg-sec);
+        }
+        .polished-pane details > summary::-webkit-details-marker { display: none; }
+        .polished-pane details > summary::before { content: "▸ "; }
+        .polished-pane details[open] > summary::before { content: "▾ "; }
+        .polished-pane pre.polished-source {
+            margin: 0;
+            padding: var(--space-4) var(--space-5);
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            background: var(--color-bg-sec);
+            max-height: 40vh;
+            overflow-y: auto;
+        }
+        .polished-pane .polish-error {
+            padding: var(--space-4) var(--space-5);
+            color: #991b1b;
+        }
+
+        /* Revision history modal — opens via the History button in
+           the toolbar. Two-pane: list on the left (scrollable), preview
+           on the right (also scrollable). View shows the revision's
+           rendered Markdown; Restore loads it into the editor and
+           closes the modal. */
+        .history-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .history-modal[hidden] { display: none; }
+        .history-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.4);
+        }
+        .history-panel {
+            position: relative;
+            background: var(--color-card-bg);
+            border-radius: var(--radius-md);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1100px;
+            width: 92%;
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-3) var(--space-5);
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-bg-sec);
+        }
+        .history-header h2 {
+            margin: 0;
+            font-size: 1rem;
+            color: var(--color-primary);
+        }
+        .history-close {
+            font: inherit;
+            font-size: 1.4rem;
+            line-height: 1;
+            padding: 0 var(--space-2);
+            border: none;
+            background: none;
+            color: var(--color-text-muted);
+            cursor: pointer;
+        }
+        .history-close:hover { color: var(--color-primary); }
+        .history-body {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+        .history-list {
+            border-right: 1px solid var(--color-border);
+            overflow-y: auto;
+            padding: var(--space-2) 0;
+        }
+        .history-list .history-empty {
+            padding: var(--space-4) var(--space-4);
+            color: var(--color-text-muted);
+            font-style: italic;
+            font-size: 0.9rem;
+        }
+        .history-row {
+            padding: var(--space-2) var(--space-4);
+            border-bottom: 1px solid var(--color-border);
+            cursor: default;
+            font-size: 0.85rem;
+        }
+        .history-row.selected { background: var(--color-bg-sec); }
+        .history-row .history-when { color: var(--color-primary); font-weight: 600; }
+        .history-row .history-sub {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-top: 0.15em;
+        }
+        .history-row .history-sub .source-pill {
+            display: inline-block;
+            padding: 0 0.4em;
+            border-radius: var(--radius-full);
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            background: var(--color-bg-sec);
+            border: 1px solid var(--color-border);
+        }
+        .history-row .history-sub .source-pill.auto   { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
+        .history-row .history-sub .source-pill.manual { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+        .history-row .history-actions {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-2);
+        }
+        .history-row .history-actions button {
+            font: inherit;
+            font-size: 0.72rem;
+            padding: 0.15em 0.6em;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--color-border);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+            cursor: pointer;
+        }
+        .history-row .history-actions button.restore {
+            background: var(--color-accent);
+            color: var(--color-bg-base);
+            border-color: var(--color-accent);
+        }
+        .history-row .history-actions button.restore:hover { background: var(--color-accent-hover); }
+        .history-preview {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .history-preview-meta {
+            padding: var(--space-2) var(--space-4);
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-bg-sec);
+        }
+        .history-preview-body {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: var(--space-4) var(--space-5);
+        }
+        @media (max-width: 700px) {
+            .history-body { grid-template-columns: 1fr; }
+            .history-listcol { max-height: 40vh; border-right: none; border-bottom: 1px solid var(--color-border); }
+        }
+        .history-listcol {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--color-border);
+            min-height: 0;
+        }
+        .history-filter {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-2) var(--space-3);
+            padding: var(--space-3) var(--space-4);
+            border-bottom: 1px solid var(--color-border);
+            background: var(--color-bg-sec);
+            font-size: 0.78rem;
+        }
+        .history-filter-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .history-filter-cell > span {
+            color: var(--color-text-muted);
+            font-size: 0.78rem;
+            font-weight: 500;
+        }
+        .history-filter input,
+        .history-filter select {
+            font: inherit;
+            font-size: 0.82rem;
+            padding: var(--space-1) var(--space-2);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-main);
+        }
+        .history-filter-clear {
+            font: inherit;
+            font-size: 0.75rem;
+            padding: var(--space-1) var(--space-3);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-card-bg);
+            color: var(--color-text-muted);
+            cursor: pointer;
+            align-self: end;
+        }
+        .history-filter-clear:hover { color: var(--color-primary); }
+        .history-filter-count {
+            grid-column: 1 / -1;
+            font-size: 0.72rem;
+            color: var(--color-text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .history-row .history-actions button.diff {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fde68a;
+        }
+        .history-row .history-actions button.diff:hover { background: #fde68a; }
+
+        /* Unified diff — each line is its own coloured row so long
+           diffs stay scannable. Uses a monospace font because line
+           alignment matters more than reading flow here. */
+        .history-preview-body .diff-line {
+            display: block;
+            font-family: var(--font-mono);
+            font-size: 0.82rem;
+            line-height: 1.5;
+            padding: 0 var(--space-2);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .history-preview-body .diff-line.diff-same {
+            color: var(--color-text-muted);
+            opacity: 0.6;
+        }
+        .history-preview-body .diff-line.diff-add {
+            background: #dcfce7;
+            color: #14532d;
+            border-left: 3px solid #16a34a;
+        }
+        .history-preview-body .diff-line.diff-add::before {
+            content: "+ ";
+            font-weight: 700;
+        }
+        .history-preview-body .diff-line.diff-remove {
+            background: #fee2e2;
+            color: #7f1d1d;
+            border-left: 3px solid #dc2626;
+            text-decoration: line-through;
+            text-decoration-color: rgba(220, 38, 38, 0.5);
+        }
+        .history-preview-body .diff-line.diff-remove::before {
+            content: "- ";
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .history-preview-body .diff-summary {
+            margin-bottom: var(--space-3);
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+            font-family: var(--font-mono);
+        }
+        .history-preview-body .diff-summary .add-count { color: #14532d; font-weight: 700; }
+        .history-preview-body .diff-summary .rm-count  { color: #7f1d1d; font-weight: 700; }
+    </style>
+</head>
+<body>
+    <header class="site">
+        <img class="logo" src="/static/logo.png" alt="">
+        <h1>Scheff Writer</h1>
+        <nav>
+            <a href="/">All pieces</a>
+            {{with projectURL .Slug}}<a href="{{.}}">Project page ↗</a>{{end}}
+            {{if homeURL}}<a href="{{homeURL}}">Scheff ↗</a>{{end}}
+        </nav>
+    </header>
+    <main>
+        <input type="hidden" name="slug" value="{{.Slug}}" id="article-slug">
+        <input type="hidden" name="quiet" value="1" id="article-quiet">
+        <input type="hidden" name="source" value="manual" id="article-save-source">
+
+        <div class="article-toolbar">
+            <h2 class="article-title" title="{{.Title}}">{{.Title}}</h2>
+            <span class="project-slug">{{.Slug}}</span>
+            <div class="actions">
+                <div class="menu-wrap">
+                    <button type="button"
+                            class="menu-btn"
+                            id="export-menu-btn"
+                            aria-haspopup="true"
+                            aria-controls="export-menu"
+                            aria-expanded="false"
+                            onclick="toggleMenu('export-menu')"
+                            title="Export the current draft to an external destination.">Export ▾</button>
+                    <div class="menu" id="export-menu" role="menu" hidden>
+                        <button type="button" role="menuitem" onclick="closeMenus(); copyMarkdown()"
+                                title="Copy the raw Markdown to your clipboard.">Copy Markdown</button>
+                        <button type="button" role="menuitem" onclick="closeMenus(); copyReviewPrompt()"
+                                title="Copy a ready-to-paste review prompt (current draft + review instructions) for use in any chat assistant.">Copy review prompt</button>
+                        <button type="button" role="menuitem" onclick="closeMenus(); publishToLinkedIn()"
+                                title="Copy the article as rich HTML and open LinkedIn's Article editor in a new tab. Tables get transformed to H3+field blocks. Images need to be re-uploaded via LinkedIn's own inserter (vault paths won't resolve there).">Publish → LinkedIn</button>
+                    </div>
+                </div>
+                <div class="menu-wrap">
+                    <button type="button"
+                            class="menu-btn"
+                            id="more-menu-btn"
+                            aria-haspopup="true"
+                            aria-controls="more-menu"
+                            aria-expanded="false"
+                            onclick="toggleMenu('more-menu')"
+                            title="Additional actions for this article.">⋯</button>
+                    <div class="menu" id="more-menu" role="menu" hidden>
+                        <button type="button" role="menuitem" onclick="closeMenus(); openHistoryModal()"
+                                title="Browse prior versions of this draft. Every save (auto or manual) creates a snapshot.">Revision history</button>
+                    </div>
+                </div>
+                <button type="button"
+                        id="save-btn"
+                        class="primary"
+                        hx-post="/api/update-project"
+                        hx-include="#article-body, #article-slug, #article-quiet, #article-save-source"
+                        hx-target=".save-result"
+                        hx-swap="innerHTML"
+                        hx-on::after-request="if (event.detail.successful) { window.markSaved(); }"
+                        onclick="if (event.isTrusted) { document.getElementById('article-save-source').value = 'manual'; }"
+                        title="Save draft (Cmd/Ctrl+S). Cursor and scroll position preserved. Autosave already fires 5s after you stop typing and on blur — explicit Save is only needed for an immediate checkpoint.">Save</button>
+                <button type="button"
+                        class="transform"
+                        hx-post="/api/transform-article"
+                        hx-include="#article-body, #article-slug"
+                        hx-target="#polished-content"
+                        hx-swap="innerHTML"
+                        hx-indicator=".article-toolbar"
+                        title="Polish the current draft using your profile and tone samples, with the configured model. Opens a progress modal immediately with a Cancel button; content lands when the LLM returns (typically 20–60s).">Transform ✨</button>
+                <span class="htmx-indicator" aria-live="polite">polishing…</span>
+                <span class="save-result" hidden></span>
+            </div>
+        </div>
+
+        <div class="article-workspace">
+            <div class="article-editor">
+                <div class="pane-label">Markdown</div>
+                <div class="md-toolbar" id="md-toolbar" title="Click a button (or use the shortcut) to wrap your selection in Markdown syntax. With no selection, the syntax is inserted at the cursor for you to type into.">
+                    <button type="button" data-mdaction="bold"      title="Bold (Cmd/Ctrl+B) — wraps selection in **double asterisks**"><strong>B</strong></button>
+                    <button type="button" data-mdaction="italic"    title="Italic (Cmd/Ctrl+I) — wraps selection in *single asterisks*"><em>I</em></button>
+                    <button type="button" data-mdaction="strike"    title="Strikethrough — wraps selection in ~~tildes~~"><s>S</s></button>
+                    <span class="md-tool-sep"></span>
+                    <button type="button" data-mdaction="h2"        title="Heading 2 — prefixes the line with ##">H2</button>
+                    <button type="button" data-mdaction="h3"        title="Heading 3 — prefixes the line with ###">H3</button>
+                    <span class="md-tool-sep"></span>
+                    <button type="button" data-mdaction="ul"        title="Bullet list — prefixes each line with -">•</button>
+                    <button type="button" data-mdaction="ol"        title="Numbered list — prefixes each line with 1. (numbering doesn't matter; Markdown auto-numbers)">1.</button>
+                    <button type="button" data-mdaction="quote"     title="Block quote — prefixes each line with >">❝</button>
+                    <span class="md-tool-sep"></span>
+                    <button type="button" data-mdaction="code"      title="Inline code — wraps selection in `backticks`">&lt;c&gt;</button>
+                    <button type="button" data-mdaction="codeblock" title="Code block — wraps selection in ``` triple backticks ```">{ }</button>
+                    <button type="button" data-mdaction="link"      title="Link (Cmd/Ctrl+K) — wraps selection as [text](url); if no selection, inserts the template">🔗</button>
+                </div>
+                <textarea id="article-body"
+                          name="body"
+                          spellcheck="true"
+                          autofocus
+                          hx-post="/api/preview"
+                          hx-trigger="input changed delay:250ms"
+                          hx-target="#preview-body"
+                          hx-swap="innerHTML"
+                          hx-include="#article-slug">{{.EditableBody}}</textarea>
+            </div>
+            <div class="article-rightpane">
+                <div class="tab-bar">
+                    <button type="button" class="tab active" data-tab="preview" title="Live Markdown preview of the editor on the left.">Preview</button>
+                    <button type="button" class="tab" data-tab="chat" title="Talk through the piece with the writing assistant. It sees your profile, tone samples, current draft, and the history of this conversation.">Chat{{if .ChatBubbles}} <span class="tab-badge">{{len .ChatBubbles}}</span>{{end}}</button>
+                    <button type="button" class="tab" data-tab="sources" title="Research sources attached to this article. URLs are fetched + summarised; text snippets get an LLM extract. Transform and Chat both see these as grounding context.">Sources{{if .Sources}} <span class="tab-badge">{{len .Sources}}</span>{{end}}</button>
+                </div>
+                <div class="tab-panel preview-panel active" id="tab-preview">
+                    <div class="preview-body markdown-body" id="preview-body">{{.PreviewHTML}}</div>
+                </div>
+                <div class="tab-panel chat-panel" id="tab-chat">
+                    <div class="chat-messages" id="chat-messages">
+                        {{if .ChatBubbles}}
+                            {{range .ChatBubbles}}
+                            <div class="chat-bubble chat-{{.Role}}">
+                                <div class="bubble-meta">{{if eq .Role "user"}}You{{else}}Assistant{{end}} · {{.At.Format "Jan 2 15:04"}}</div>
+                                {{if eq .Role "user"}}
+                                <div class="bubble-content">{{.Content}}</div>
+                                {{else}}
+                                <div class="bubble-content markdown-body">{{.HTML}}</div>
+                                <div class="bubble-actions">
+                                    <button type="button" onclick="insertIntoDraft(this)" title="Append this reply to the editor on the left. Save remains a separate explicit step.">Insert into draft</button>
+                                    <button type="button" onclick="copyChatReply(this)" title="Copy this reply's Markdown to your clipboard.">Copy</button>
+                                    <textarea class="bubble-raw" hidden>{{.Content}}</textarea>
+                                </div>
+                                {{end}}
+                            </div>
+                            {{end}}
+                        {{else}}
+                            <div class="chat-empty">No conversation yet. Talk to the assistant about your draft. It sees your profile, tone, and current body. Don't ask it to draft prose; ask it to push back.</div>
+                        {{end}}
+                    </div>
+                    <form class="chat-input"
+                          hx-post="/api/article-chat"
+                          hx-include="#article-body, #article-slug"
+                          hx-target="#chat-messages"
+                          hx-swap="beforeend"
+                          hx-on::before-request="prepareChatSubmit(this)"
+                          hx-on::after-request="finalizeChatSubmit(this, event)">
+                        <textarea name="message" placeholder="Push back on my thesis. Where's this argument weakest? — paste screenshots / charts / images for the assistant to look at."></textarea>
+                        <input type="hidden" name="attachments" id="chat-attachments">
+                        <div class="chat-attach-strip" id="chat-attach-strip" hidden></div>
+                        <div class="chat-input-row">
+                            <button type="button"
+                                    class="chat-reset"
+                                    hx-post="/api/article-chat-reset"
+                                    hx-include="#article-slug"
+                                    hx-target="next .chat-reset-result"
+                                    hx-swap="innerHTML"
+                                    hx-confirm="Reset chat thread? This deletes the conversation file. The page will reload."
+                                    title="Wipe the chat thread for this article. Profile and tone samples are untouched.">Reset thread</button>
+                            <span class="chat-reset-result"></span>
+                            <span style="flex:1 1 auto;"></span>
+                            <span class="chat-thinking">thinking…</span>
+                            <button type="submit" class="send">Send</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="tab-panel sources-panel" id="tab-sources">
+                    <div class="sources-list" id="sources-list">
+                        {{if .Sources}}
+                            {{range .Sources}}
+                            <div class="source-card">
+                                <div class="source-meta">
+                                    <span class="kind-pill">{{if .Kind}}{{.Kind}}{{else if .URL}}url{{else}}text{{end}}</span>
+                                    {{if .Model}}<span class="model-pill" title="Model that produced this extraction">{{.Model}}</span>{{end}}
+                                    {{if .Depth}}<span class="depth-pill{{if .DepthClamped}} clamped{{end}}" title="{{if .DepthClamped}}Requested depth was clamped because the chosen model has a lower output cap. Re-ingest with claude-best at the same depth to get the full extraction.{{else}}Depth budget used for this extraction{{end}}">{{.Depth}}{{if .DepthClamped}} (clamped){{end}}</span>{{end}}
+                                    Added {{.AddedAt.Format "Jan 2 15:04"}}
+                                </div>
+                                <div class="source-title">{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a>{{else}}{{.Title}}{{end}}</div>
+                                {{if .Excerpt}}<div class="source-excerpt">{{.Excerpt}}</div>{{end}}
+                                <div class="source-actions">
+                                    <form hx-post="/api/remove-source"
+                                          hx-confirm="Remove this source? The summary file will be deleted; the original URL/text is unaffected."
+                                          hx-target=".add-result"
+                                          hx-swap="innerHTML">
+                                        <input type="hidden" name="slug" value="{{$.Slug}}">
+                                        <input type="hidden" name="name" value="{{.Name}}">
+                                        <button type="submit" class="source-remove" title="Delete this source. Transform and Chat will no longer see it.">Remove</button>
+                                    </form>
+                                </div>
+                            </div>
+                            {{end}}
+                        {{else}}
+                            <div class="sources-empty">No sources attached. Add a URL (HTML page or PDF — PDFs include table and chart extraction) or paste text below. Sources are summarised and fed into Transform + Chat as grounding context.</div>
+                        {{end}}
+                    </div>
+                    <div class="sources-add">
+                        <div class="kind-tabs">
+                            <button type="button" class="kind-tab active" data-kind="url" title="Fetch a web page or PDF. HTML/text pages go to openai-fast for summary. PDFs are auto-detected (Content-Type or %PDF magic bytes) and routed to claude-best with native PDF reading — tables and charts are transcribed as Markdown into the source file. PDF ingest costs ~$0.10-0.20 per document.">URL</button>
+                            <button type="button" class="kind-tab" data-kind="text" title="Paste text directly. Same LLM extract → saved as a source file. Use this when a URL isn't available, but note: pasted PDF text loses charts and images.">Text</button>
+                        </div>
+                        {{define "model-depth-row"}}
+                        <div class="model-depth-row">
+                            <label class="ingest-knob">
+                                <span class="knob-label" title="Which LLM to use for this extraction. claude-best (Sonnet) is the default and best for PDFs / dense documents. claude-fast (Haiku) is cheaper and faster for simple text. openai-best / openai-fast as fallback when Anthropic is rate-limited or for cross-provider validation.">Model</span>
+                                <select name="model">
+                                    <option value="claude-best" selected>claude-best (Sonnet)</option>
+                                    <option value="claude-fast">claude-fast (Haiku)</option>
+                                    <option value="openai-best">openai-best</option>
+                                    <option value="openai-fast">openai-fast</option>
+                                </select>
+                            </label>
+                            <label class="ingest-knob">
+                                <span class="knob-label" title="How much output token budget to give the extraction. Low = ~2K tokens, fast and cheap, summary only. Medium = ~8K tokens (default), full key points + tables + charts for normal docs. High = ~16K tokens, for dense documents with multi-page tables (RACI matrices, comparison tables, etc.). claude-fast caps at 8K regardless — High requests get silently clamped.">Depth</span>
+                                <select name="depth">
+                                    <option value="low">Low (2K tokens, fast / cheap)</option>
+                                    <option value="medium" selected>Medium (8K tokens, default)</option>
+                                    <option value="high">High (16K tokens, dense docs)</option>
+                                </select>
+                            </label>
+                        </div>
+                        {{end}}
+
+                        <form class="active"
+                              data-kind="url"
+                              hx-post="/api/add-source"
+                              hx-target=".add-result"
+                              hx-swap="innerHTML"
+                              hx-on::after-request="if (event.detail.successful) { this.querySelector('input[name=url]').value=''; this.querySelector('input[name=title]').value=''; }">
+                            <input type="hidden" name="slug" value="{{.Slug}}">
+                            <input type="hidden" name="kind" value="url">
+                            <input type="url" name="url" placeholder="https://… (HTML page or PDF)" required title="Full URL. Redirects followed (max 5). HTML pages: up to 64 KB of text sent to the chosen model. PDFs: up to 30 MB of binary sent to the chosen model for full extraction including tables and chart data.">
+                            <input type="text" name="title" placeholder="Optional title (overrides what the LLM extracts)" maxlength="120">
+                            {{template "model-depth-row" .}}
+                            <div style="display:flex; align-items:center; gap: var(--space-3);">
+                                <button type="submit" class="add">Fetch &amp; summarise</button>
+                                <span class="add-thinking">fetching + summarising…</span>
+                                <span class="add-result"></span>
+                            </div>
+                        </form>
+                        <form data-kind="text"
+                              hx-post="/api/add-source"
+                              hx-target=".add-result"
+                              hx-swap="innerHTML"
+                              hx-on::after-request="if (event.detail.successful) { this.querySelector('textarea[name=text]').value=''; this.querySelector('input[name=title]').value=''; this.querySelector('input[name=url]').value=''; }">
+                            <input type="hidden" name="slug" value="{{.Slug}}">
+                            <input type="hidden" name="kind" value="text">
+                            <input type="url" name="url" placeholder="Optional source URL (where the text came from)">
+                            <input type="text" name="title" placeholder="Optional title (overrides what the LLM extracts)" maxlength="120">
+                            <textarea name="text" placeholder="Paste the content — article body, PDF excerpt, quote, anything. The LLM extracts title + summary + key points." required></textarea>
+                            {{template "model-depth-row" .}}
+                            <div style="display:flex; align-items:center; gap: var(--space-3);">
+                                <button type="submit" class="add">Summarise &amp; add</button>
+                                <span class="add-thinking">summarising…</span>
+                                <span class="add-result"></span>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="polished-modal" class="polished-modal" hidden aria-hidden="true" data-state="idle">
+            <div class="polished-backdrop" onclick="closePolishedModal()"></div>
+            <div class="polished-panel" role="dialog" aria-labelledby="polished-modal-title">
+                <button type="button" class="polished-close" onclick="closePolishedModal()" title="Close (Esc)">×</button>
+
+                <div class="polished-loading" aria-live="polite">
+                    <div class="spinner" aria-hidden="true"></div>
+                    <p class="loading-title">Transforming…</p>
+                    <p class="loading-hint">Calling {{model}} with your profile, tone samples, and any attached sources. Typically 20–60s for a long draft.</p>
+                    <p class="loading-elapsed"><span id="polished-elapsed">0s</span> elapsed</p>
+                    <button type="button" class="polished-cancel" onclick="cancelTransform()" title="Cancel the request. The server-side LLM call may still complete but the result is discarded.">Cancel</button>
+                </div>
+
+                <div class="polished-error" role="alert">
+                    <p class="error-title">Transform failed</p>
+                    <p class="error-message" id="polished-error-message">Unknown error.</p>
+                    <button type="button" class="error-close" onclick="closePolishedModal()">Close</button>
+                </div>
+
+                <div id="polished-content" aria-live="polite"></div>
+            </div>
+        </div>
+
+        {{/* Status bar — Word-style bottom bar. Left: save state
+             dot + text. Middle: writing metrics that used to be
+             scattered across the toolbar. Right: model in use.
+             All state moved off the top bar so primary actions
+             (Save / Transform) don't compete with changing text. */}}
+        <div class="article-statusbar" id="article-statusbar" aria-live="polite">
+            <div class="statusbar-left">
+                <span class="autosave-status" id="autosave-status"
+                      title="Save state. Green = saved (with last-saved time). Amber = unsaved changes buffered. Blue = save in flight. Autosave fires 5s after you stop typing and on blur; explicit Save with Cmd+S also works.">
+                    <span class="save-dot"></span>
+                    <span class="save-text">autosave: ready</span>
+                </span>
+            </div>
+            <div class="statusbar-mid">
+                <span id="word-count">0 words · ~0 min read</span>
+                {{if .Sources}}<span class="statusbar-sep">·</span><span title="Number of sources attached to this article. Sources are visible to Chat + Transform on every call.">{{len .Sources}} source{{if ne (len .Sources) 1}}s{{end}}</span>{{end}}
+                {{if .ChatBubbles}}<span class="statusbar-sep">·</span><span title="Turns in the chat thread for this article.">{{len .ChatBubbles}} chat turn{{if ne (len .ChatBubbles) 1}}s{{end}}</span>{{end}}
+            </div>
+            <div class="statusbar-right">
+                <span class="statusbar-model" title="Model used for Transform and Chat.">{{model}}</span>
+            </div>
+        </div>
+
+        <div id="history-modal" class="history-modal" hidden aria-hidden="true">
+            <div class="history-backdrop" onclick="closeHistoryModal()"></div>
+            <div class="history-panel" role="dialog" aria-labelledby="history-title">
+                <div class="history-header">
+                    <h2 id="history-title">Revision history</h2>
+                    <button type="button" class="history-close" onclick="closeHistoryModal()" title="Close (Esc)">×</button>
+                </div>
+                <div class="history-body">
+                    <div class="history-listcol">
+                        <div class="history-filter">
+                            <label class="history-filter-cell">
+                                <span>From</span>
+                                <input type="date" id="history-from" title="Only show revisions saved on or after this date (inclusive).">
+                            </label>
+                            <label class="history-filter-cell">
+                                <span>To</span>
+                                <input type="date" id="history-to" title="Only show revisions saved on or before this date (inclusive).">
+                            </label>
+                            <label class="history-filter-cell">
+                                <span>Source</span>
+                                <select id="history-source-filter" title="Filter by save source.">
+                                    <option value="">All</option>
+                                    <option value="manual">Manual only</option>
+                                    <option value="auto">Auto only</option>
+                                </select>
+                            </label>
+                            <button type="button" class="history-filter-clear" onclick="clearHistoryFilter()" title="Reset all filters.">Clear</button>
+                            <span class="history-filter-count" id="history-filter-count"></span>
+                        </div>
+                        <div class="history-list" id="history-list">Loading…</div>
+                    </div>
+                    <div class="history-preview" id="history-preview" hidden>
+                        <div class="history-preview-meta" id="history-preview-meta"></div>
+                        <div class="history-preview-body markdown-body" id="history-preview-body"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <textarea id="copy-staging" style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true"></textarea>
+    </main>
+    <script src="/static/htmx.min.js"></script>
+    <script>
+        (function() {
+            const ta = document.getElementById('article-body');
+            const wc = document.getElementById('word-count');
+            const saveBtn = document.querySelector('.article-toolbar button.primary');
+
+            function updateWordCount() {
+                const words = (ta.value.match(/\b[\w'’]+\b/g) || []).length;
+                const minutes = Math.max(1, Math.ceil(words / 200));
+                wc.textContent = words + ' words · ~' + minutes + ' min read';
+            }
+
+            ta.addEventListener('input', updateWordCount);
+            updateWordCount();
+
+            // Autosave + dirty tracking. Triggers:
+            //   - 5 seconds after the last keystroke (debounced — the
+            //     timer resets on each input)
+            //   - On textarea blur if there are unsaved changes
+            //   - Explicit Save button / Cmd+S still work, set 'dirty'
+            //     back to false via window.markSaved() (called by the
+            //     save form's hx-on::after-request)
+            // beforeunload warns if the operator tries to close the
+            // tab / hit Back with unsaved changes still in the buffer.
+            const statusEl = document.getElementById('autosave-status');
+            const statusTextEl = statusEl.querySelector('.save-text');
+            let lastSavedContent = ta.value;
+            let dirty = false;
+            let autosaveTimer = null;
+
+            function setStatus(state, text) {
+                // Preserve the .save-dot child (it colours by state);
+                // only update the text span.
+                statusEl.className = 'autosave-status' + (state ? ' ' + state : '');
+                if (statusTextEl) statusTextEl.textContent = text;
+            }
+
+            function fmtTime(d) {
+                const h = String(d.getHours()).padStart(2, '0');
+                const m = String(d.getMinutes()).padStart(2, '0');
+                const s = String(d.getSeconds()).padStart(2, '0');
+                return h + ':' + m + ':' + s;
+            }
+
+            function checkDirty() {
+                const now = ta.value !== lastSavedContent;
+                if (now !== dirty) {
+                    dirty = now;
+                    if (dirty) {
+                        setStatus('dirty', 'unsaved changes…');
+                        // Clear the stale 'Project body saved.' toast
+                        // the moment the operator touches the buffer —
+                        // otherwise it sticks around until the next
+                        // save completes and reads as a lie.
+                        const sr = document.querySelector('.save-result');
+                        if (sr) sr.innerHTML = '';
+                    }
+                }
+            }
+
+            // Save source flip: autosave / blur set 'auto', explicit
+            // Save button / Cmd+S set 'manual'. The server reads
+            // this and records it in the revision snapshot's front
+            // matter so the History modal can badge each row.
+            const saveSourceInput = document.getElementById('article-save-source');
+            function fireSave(source) {
+                if (!dirty) return;
+                if (saveSourceInput) saveSourceInput.value = source || 'auto';
+                setStatus('saving', 'saving…');
+                htmx.trigger(saveBtn, 'click');
+            }
+
+            // Called by the save form's hx-on::after-request on success.
+            window.markSaved = function() {
+                lastSavedContent = ta.value;
+                dirty = false;
+                setStatus('saved', 'saved ' + fmtTime(new Date()));
+            };
+
+            ta.addEventListener('input', function() {
+                checkDirty();
+                if (autosaveTimer) clearTimeout(autosaveTimer);
+                autosaveTimer = setTimeout(function() {
+                    autosaveTimer = null;
+                    // re-check at firing time — operator may have
+                    // hit Save manually in the meantime.
+                    checkDirty();
+                    fireSave('auto');
+                }, 5000);
+            });
+
+            ta.addEventListener('blur', function() {
+                if (autosaveTimer) {
+                    clearTimeout(autosaveTimer);
+                    autosaveTimer = null;
+                }
+                checkDirty();
+                fireSave('auto');
+            });
+
+            // Warn on close/back/refresh if there are unsaved changes.
+            // Modern browsers ignore the custom message and show their
+            // own generic 'Changes you made may not be saved' prompt.
+            window.addEventListener('beforeunload', function(e) {
+                if (dirty) {
+                    e.preventDefault();
+                    e.returnValue = '';
+                    return '';
+                }
+            });
+
+            // Markdown toolbar — wrap/insert MD syntax around the
+            // current selection. Re-focuses the textarea after the
+            // edit so the operator can keep typing without an extra
+            // click. Updates word count + triggers autosave by
+            // dispatching an input event (same path as a keystroke).
+            function applyMdAction(action) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const selected = ta.value.slice(start, end);
+                let before = '', after = '', placeholder = '', linePrefix = '';
+
+                switch (action) {
+                    case 'bold':       before = '**'; after = '**'; placeholder = 'bold text'; break;
+                    case 'italic':     before = '*';  after = '*';  placeholder = 'italic text'; break;
+                    case 'strike':     before = '~~'; after = '~~'; placeholder = 'strikethrough'; break;
+                    case 'h2':         linePrefix = '## '; placeholder = 'Heading'; break;
+                    case 'h3':         linePrefix = '### '; placeholder = 'Heading'; break;
+                    case 'ul':         linePrefix = '- '; placeholder = 'list item'; break;
+                    case 'ol':         linePrefix = '1. '; placeholder = 'list item'; break;
+                    case 'quote':      linePrefix = '> '; placeholder = 'quote'; break;
+                    case 'code':       before = '`'; after = '`'; placeholder = 'code'; break;
+                    case 'codeblock':  before = '\n```\n'; after = '\n```\n'; placeholder = 'code'; break;
+                    case 'link':
+                        if (selected) {
+                            // [selected](url) — caret lands inside the (url) so they can paste
+                            const insertion = '[' + selected + '](url)';
+                            ta.value = ta.value.slice(0, start) + insertion + ta.value.slice(end);
+                            const urlStart = start + selected.length + 3;
+                            ta.setSelectionRange(urlStart, urlStart + 3);
+                            ta.focus();
+                            ta.dispatchEvent(new Event('input', { bubbles: true }));
+                            return;
+                        }
+                        before = '[';
+                        after = '](url)';
+                        placeholder = 'link text';
+                        break;
+                }
+
+                if (linePrefix) {
+                    // Line-prefix actions: prefix each line of the
+                    // current selection (or the line the cursor is on).
+                    const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
+                    const lineEnd = ta.value.indexOf('\n', end);
+                    const effectiveEnd = lineEnd === -1 ? ta.value.length : lineEnd;
+                    const lines = ta.value.slice(lineStart, effectiveEnd).split('\n');
+                    const prefixed = lines.map(function(l) {
+                        if (l.startsWith(linePrefix)) return l; // toggle-friendly: don't double-prefix
+                        return linePrefix + (l || placeholder);
+                    }).join('\n');
+                    ta.value = ta.value.slice(0, lineStart) + prefixed + ta.value.slice(effectiveEnd);
+                    const newEnd = lineStart + prefixed.length;
+                    ta.setSelectionRange(newEnd, newEnd);
+                } else {
+                    // Wrap-around action: bold, italic, code, etc.
+                    const inner = selected || placeholder;
+                    const insertion = before + inner + after;
+                    ta.value = ta.value.slice(0, start) + insertion + ta.value.slice(end);
+                    if (selected) {
+                        // Select what was wrapped so they can keep typing over it
+                        ta.setSelectionRange(start + before.length, start + before.length + inner.length);
+                    } else {
+                        // Select the placeholder so they can type over it
+                        ta.setSelectionRange(start + before.length, start + before.length + placeholder.length);
+                    }
+                }
+                ta.focus();
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            document.querySelectorAll('#md-toolbar button[data-mdaction]').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    applyMdAction(btn.dataset.mdaction);
+                });
+            });
+
+            // Image paste — intercept image data on the editor,
+            // upload via /api/upload-attachment, insert the resulting
+            // ![](attachments/<filename>) reference at the cursor.
+            // Placeholder token is inserted synchronously so the
+            // operator sees immediate feedback and can keep typing
+            // while the upload flies.
+            const articleSlug = document.getElementById('article-slug').value;
+
+            function insertAtCursor(text) {
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+                ta.setSelectionRange(start + text.length, start + text.length);
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            ta.addEventListener('paste', function(e) {
+                const items = (e.clipboardData && e.clipboardData.items) ? e.clipboardData.items : [];
+                let imageItem = null;
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                        imageItem = items[i];
+                        break;
+                    }
+                }
+                if (!imageItem) return; // fall through to default text paste
+
+                e.preventDefault();
+                const blob = imageItem.getAsFile();
+                if (!blob) return;
+
+                // Placeholder inserts an obviously-temporary marker at
+                // the cursor. On success it's swapped for the real
+                // reference; on failure it's replaced with a red note.
+                const placeholderId = 'upload-' + Math.random().toString(36).slice(2, 10);
+                const placeholder = '![uploading… ' + placeholderId + '](placeholder)';
+                insertAtCursor(placeholder);
+                setStatus('saving', 'uploading image…');
+
+                const form = new FormData();
+                form.append('slug', articleSlug);
+                form.append('image', blob, 'pasted.' + (blob.type.split('/')[1] || 'bin'));
+
+                fetch('/api/upload-attachment', {
+                    method: 'POST',
+                    body: form,
+                    credentials: 'same-origin',
+                }).then(function(res) {
+                    if (!res.ok) {
+                        return res.text().then(function(txt) {
+                            throw new Error(res.status + ': ' + (txt || res.statusText));
+                        });
+                    }
+                    return res.json();
+                }).then(function(data) {
+                    const reference = '![](attachments/' + data.filename + ')';
+                    ta.value = ta.value.replace(placeholder, reference);
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    setStatus('saved', 'image uploaded ' + fmtTime(new Date()));
+                }).catch(function(err) {
+                    const failure = '[image upload failed: ' + err.message + ']';
+                    ta.value = ta.value.replace(placeholder, failure);
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    setStatus('dirty', 'upload failed — details in editor');
+                });
+            });
+
+            // Cmd/Ctrl-S saves explicitly (manual checkpoint).
+            // Cmd/Ctrl-B/I/K wrap selection in MD syntax if the editor
+            // is focused (browser-native shortcuts on textarea would
+            // do nothing useful otherwise).
+            document.addEventListener('keydown', function(e) {
+                if (!(e.metaKey || e.ctrlKey)) return;
+                if (e.key === 's') {
+                    e.preventDefault();
+                    checkDirty();
+                    if (dirty) {
+                        if (autosaveTimer) {
+                            clearTimeout(autosaveTimer);
+                            autosaveTimer = null;
+                        }
+                        fireSave('manual');
+                    } else {
+                        setStatus('saved', 'already saved ' + fmtTime(new Date()));
+                    }
+                    return;
+                }
+                if (document.activeElement !== ta) return;
+                if (e.key === 'b' || e.key === 'B') {
+                    e.preventDefault();
+                    applyMdAction('bold');
+                } else if (e.key === 'i' || e.key === 'I') {
+                    e.preventDefault();
+                    applyMdAction('italic');
+                } else if (e.key === 'k' || e.key === 'K') {
+                    e.preventDefault();
+                    applyMdAction('link');
+                }
+            });
+
+            window.copyMarkdown = function() {
+                copyToClipboard(ta.value, 'Markdown copied.');
+            };
+
+            window.copyReviewPrompt = function() {
+                const title = {{.Title}};
+                const prompt =
+                    'You are reviewing an article draft. Focus on:\n' +
+                    '- Clarity and structure (is the argument easy to follow?)\n' +
+                    '- Factual claims (anything that needs a source or fact-check?)\n' +
+                    '- Where the argument could be sharpened\n' +
+                    '- Anything that should be cut\n' +
+                    '\n' +
+                    'Be specific. Quote sentences you want to change.\n' +
+                    '\n' +
+                    'Title: ' + title + '\n' +
+                    '\n' +
+                    '---\n' +
+                    '\n' +
+                    ta.value;
+                copyToClipboard(prompt, 'Review prompt copied. Paste it into your chat assistant.');
+            };
+
+            // Publish to LinkedIn — Path A (2026-07-04). No LinkedIn
+            // API involved. Grabs the RENDERED HTML from the live
+            // preview pane (goldmark output — headings, lists, tables,
+            // links all as real HTML tags) and writes it to the
+            // clipboard as text/html so LinkedIn's rich-text Article
+            // editor picks up the formatting on paste. Falls back to
+            // plain text if the Clipboard API refuses.
+            //
+            // Attachments: LinkedIn can't reach our /api/attachment
+            // URLs, so each <img> is swapped for an italic
+            // '[image: filename — upload here]' paragraph the
+            // operator can spot and replace with a LinkedIn-hosted
+            // upload after paste.
+            //
+            // First revision (b081b4f) copied raw Markdown — LinkedIn
+            // treats it as literal text and the operator saw '## xxx'
+            // and '|Stream|Name|' unrendered. Rich-text HTML paste is
+            // how every other 'copy from browser, paste to Word / Google
+            // Docs / LinkedIn' handoff works — LinkedIn's Draft.js-style
+            // editor accepts it and maps tags to its own block types.
+            //
+            // Path B (n8n LinkedIn OAuth2 node + automated posting)
+            // stays deferred until the operator has a canonical URL to link to.
+            // Toolbar dropdown menus (Export ▾ and ⋯ More). Toggle
+            // opens the target menu, closes the others, keeps
+            // aria-expanded in sync for screen readers. Click-outside
+            // and Escape both close all menus.
+            window.toggleMenu = function(id) {
+                const target = document.getElementById(id);
+                if (!target) return;
+                const willOpen = target.hidden;
+                document.querySelectorAll('.article-toolbar .menu').forEach(function(m) {
+                    m.hidden = true;
+                });
+                document.querySelectorAll('.article-toolbar .menu-btn').forEach(function(b) {
+                    b.setAttribute('aria-expanded', 'false');
+                });
+                if (willOpen) {
+                    target.hidden = false;
+                    const btn = document.querySelector('.article-toolbar .menu-btn[aria-controls="' + id + '"]');
+                    if (btn) btn.setAttribute('aria-expanded', 'true');
+                }
+            };
+            window.closeMenus = function() {
+                document.querySelectorAll('.article-toolbar .menu').forEach(function(m) { m.hidden = true; });
+                document.querySelectorAll('.article-toolbar .menu-btn').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+            };
+            // Click outside any menu closes them all.
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.article-toolbar .menu-wrap')) {
+                    closeMenus();
+                }
+            });
+
+            // Revision history modal — fetches /api/list-revisions
+            // and renders each snapshot as a row with View/Restore.
+            // View → GETs /api/load-revision and renders the markdown
+            // in the preview pane. Restore → same GET, but loads the
+            // body into the editor and closes the modal. Restore does
+            // NOT save — operator reviews then hits Save, which
+            // creates a new revision at 'now' with the restored
+            // content (the old revisions all stay in place).
+            const historyModal = document.getElementById('history-modal');
+            const historyList = document.getElementById('history-list');
+            const historyPreview = document.getElementById('history-preview');
+            const historyPreviewMeta = document.getElementById('history-preview-meta');
+            const historyPreviewBody = document.getElementById('history-preview-body');
+            const historyFromInput = document.getElementById('history-from');
+            const historyToInput = document.getElementById('history-to');
+            const historySourceSelect = document.getElementById('history-source-filter');
+            const historyFilterCount = document.getElementById('history-filter-count');
+
+            // The full loaded list of revisions from the last
+            // openHistoryModal fetch. Filter changes re-render from
+            // this cache rather than round-tripping to the server.
+            let historyRevisions = [];
+
+            function applyHistoryFilter() {
+                const from = historyFromInput.value; // 'YYYY-MM-DD' or ''
+                const to = historyToInput.value;
+                const src = historySourceSelect.value;
+                const filtered = historyRevisions.filter(function(rv) {
+                    if (src && rv.source !== src) return false;
+                    if (!rv.saved_at) return true;
+                    const day = rv.saved_at.slice(0, 10); // ISO YYYY-MM-DD prefix
+                    if (from && day < from) return false;
+                    if (to && day > to) return false;
+                    return true;
+                });
+                renderHistoryList(filtered);
+                historyFilterCount.textContent =
+                    filtered.length + ' of ' + historyRevisions.length + ' shown' +
+                    ((from || to || src) ? ' (filtered)' : '');
+            }
+
+            window.clearHistoryFilter = function() {
+                historyFromInput.value = '';
+                historyToInput.value = '';
+                historySourceSelect.value = '';
+                applyHistoryFilter();
+            };
+
+            historyFromInput.addEventListener('change', applyHistoryFilter);
+            historyToInput.addEventListener('change', applyHistoryFilter);
+            historySourceSelect.addEventListener('change', applyHistoryFilter);
+
+            // Line-based diff using the classic LCS DP + backtrack.
+            // O(m·n) time and space; a 5000-word article at ~500 lines
+            // means a 250K-cell table — fine for the browser. Returns
+            // a flat array of {type: 'same'|'add'|'remove', line: str}
+            // in original order. Trailing empty lines from split('\n')
+            // are dropped to keep the diff tight.
+            function diffLines(oldText, newText) {
+                function trimTrailingEmpty(arr) {
+                    while (arr.length > 0 && arr[arr.length - 1] === '') arr.pop();
+                    return arr;
+                }
+                const a = trimTrailingEmpty(oldText.split('\n'));
+                const b = trimTrailingEmpty(newText.split('\n'));
+                const m = a.length, n = b.length;
+                const dp = new Array(m + 1);
+                for (let i = 0; i <= m; i++) dp[i] = new Int32Array(n + 1);
+                for (let i = 1; i <= m; i++) {
+                    for (let j = 1; j <= n; j++) {
+                        if (a[i - 1] === b[j - 1]) {
+                            dp[i][j] = dp[i - 1][j - 1] + 1;
+                        } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+                            dp[i][j] = dp[i - 1][j];
+                        } else {
+                            dp[i][j] = dp[i][j - 1];
+                        }
+                    }
+                }
+                const out = [];
+                let i = m, j = n;
+                while (i > 0 && j > 0) {
+                    if (a[i - 1] === b[j - 1]) {
+                        out.push({ type: 'same', line: a[i - 1] });
+                        i--; j--;
+                    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+                        out.push({ type: 'remove', line: a[i - 1] });
+                        i--;
+                    } else {
+                        out.push({ type: 'add', line: b[j - 1] });
+                        j--;
+                    }
+                }
+                while (i > 0) { out.push({ type: 'remove', line: a[i - 1] }); i--; }
+                while (j > 0) { out.push({ type: 'add', line: b[j - 1] }); j--; }
+                out.reverse();
+                return out;
+            }
+
+            function renderDiff(rv, revBody) {
+                const diff = diffLines(revBody, ta.value);
+                let adds = 0, removes = 0;
+                diff.forEach(function(d) {
+                    if (d.type === 'add') adds++;
+                    else if (d.type === 'remove') removes++;
+                });
+                historyPreviewMeta.textContent =
+                    'Diff: revision ' + relativeTime(rv.saved_at) +
+                    ' → current editor · +' + adds + ' / −' + removes + ' lines';
+                historyPreviewBody.innerHTML = '';
+                const summary = document.createElement('div');
+                summary.className = 'diff-summary';
+                summary.innerHTML =
+                    'Changes since this revision was saved: ' +
+                    '<span class="add-count">+' + adds + ' added</span>, ' +
+                    '<span class="rm-count">−' + removes + ' removed</span>. ' +
+                    'Unchanged lines dimmed.';
+                historyPreviewBody.appendChild(summary);
+                diff.forEach(function(d) {
+                    const line = document.createElement('span');
+                    line.className = 'diff-line diff-' + d.type;
+                    // Preserve empty lines as a single space so they
+                    // still render as a visible row rather than
+                    // collapsing.
+                    line.textContent = d.line || ' ';
+                    historyPreviewBody.appendChild(line);
+                });
+                historyPreview.hidden = false;
+                document.querySelectorAll('#history-list .history-row').forEach(function(r) {
+                    r.classList.toggle('selected', r.dataset.name === rv.name);
+                });
+            }
+
+            function diffRevision(rv) {
+                historyPreviewMeta.textContent = 'Loading diff…';
+                historyPreviewBody.textContent = '';
+                historyPreview.hidden = false;
+                fetch('/api/load-revision?slug=' + encodeURIComponent(articleSlug) + '&name=' + encodeURIComponent(rv.name), {
+                    credentials: 'same-origin',
+                }).then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.text();
+                }).then(function(body) {
+                    renderDiff(rv, body);
+                }).catch(function(err) {
+                    historyPreviewBody.textContent = 'Diff load failed: ' + err.message;
+                });
+            }
+
+            function relativeTime(iso) {
+                const then = new Date(iso).getTime();
+                if (isNaN(then)) return iso;
+                const diff = (Date.now() - then) / 1000; // seconds
+                if (diff < 60) return Math.round(diff) + 's ago';
+                if (diff < 3600) return Math.round(diff / 60) + 'm ago';
+                if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
+                return Math.round(diff / 86400) + 'd ago';
+            }
+
+            function renderHistoryList(revs) {
+                if (!revs || revs.length === 0) {
+                    historyList.innerHTML = '<div class="history-empty">No prior revisions yet. Every save creates one (with a 60-second dedup for autosave spam).</div>';
+                    return;
+                }
+                historyList.innerHTML = '';
+                revs.forEach(function(rv) {
+                    const row = document.createElement('div');
+                    row.className = 'history-row';
+                    row.dataset.name = rv.name;
+                    const when = document.createElement('div');
+                    when.className = 'history-when';
+                    when.textContent = relativeTime(rv.saved_at);
+                    when.title = rv.saved_at;
+                    row.appendChild(when);
+                    const sub = document.createElement('div');
+                    sub.className = 'history-sub';
+                    const pill = document.createElement('span');
+                    pill.className = 'source-pill ' + (rv.source === 'auto' ? 'auto' : 'manual');
+                    pill.textContent = rv.source || 'manual';
+                    sub.appendChild(pill);
+                    sub.appendChild(document.createTextNode(' · ' + (rv.word_count || 0) + ' words · ' + Math.round((rv.body_bytes || 0) / 1024) + 'KB'));
+                    row.appendChild(sub);
+                    const actions = document.createElement('div');
+                    actions.className = 'history-actions';
+                    const viewBtn = document.createElement('button');
+                    viewBtn.type = 'button';
+                    viewBtn.textContent = 'View';
+                    viewBtn.title = 'Show this revision in the preview pane on the right';
+                    viewBtn.addEventListener('click', function() { viewRevision(rv); });
+                    actions.appendChild(viewBtn);
+                    const diffBtn = document.createElement('button');
+                    diffBtn.type = 'button';
+                    diffBtn.className = 'diff';
+                    diffBtn.textContent = 'Diff';
+                    diffBtn.title = 'Show a line-diff between this revision and the current editor content. Green = added since this revision; red = removed since this revision.';
+                    diffBtn.addEventListener('click', function() { diffRevision(rv); });
+                    actions.appendChild(diffBtn);
+                    const restoreBtn = document.createElement('button');
+                    restoreBtn.type = 'button';
+                    restoreBtn.className = 'restore';
+                    restoreBtn.textContent = 'Restore';
+                    restoreBtn.title = 'Load this revision into the editor. Does NOT save — review, then click Save to make it canonical (which creates a new revision at "now"). Prior revisions stay on disk.';
+                    restoreBtn.addEventListener('click', function() { restoreRevision(rv); });
+                    actions.appendChild(restoreBtn);
+                    row.appendChild(actions);
+                    historyList.appendChild(row);
+                });
+            }
+
+            function viewRevision(rv) {
+                document.querySelectorAll('#history-list .history-row').forEach(function(r) {
+                    r.classList.toggle('selected', r.dataset.name === rv.name);
+                });
+                historyPreviewMeta.textContent =
+                    'Saved ' + relativeTime(rv.saved_at) +
+                    ' · ' + (rv.source === 'auto' ? 'autosave' : 'manual') +
+                    ' · ' + (rv.word_count || 0) + ' words';
+                historyPreviewBody.textContent = 'Loading…';
+                historyPreview.hidden = false;
+                fetch('/api/load-revision?slug=' + encodeURIComponent(articleSlug) + '&name=' + encodeURIComponent(rv.name), {
+                    credentials: 'same-origin',
+                }).then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.text();
+                }).then(function(body) {
+                    // Server-side render would require another endpoint;
+                    // do a lightweight text-with-basic-formatting render
+                    // instead — good enough for the preview pane.
+                    historyPreviewBody.innerHTML = '';
+                    const pre = document.createElement('pre');
+                    pre.style.cssText = 'white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.55; margin: 0;';
+                    pre.textContent = body;
+                    historyPreviewBody.appendChild(pre);
+                }).catch(function(err) {
+                    historyPreviewBody.textContent = 'Load failed: ' + err.message;
+                });
+            }
+
+            function restoreRevision(rv) {
+                const proceed = confirm('Restore the revision from ' + relativeTime(rv.saved_at) + '?\n\nThe editor will be replaced with this revision. Current unsaved edits will be lost unless you Save first. This does NOT auto-save — review the loaded content, then click Save to make it canonical.');
+                if (!proceed) return;
+                fetch('/api/load-revision?slug=' + encodeURIComponent(articleSlug) + '&name=' + encodeURIComponent(rv.name), {
+                    credentials: 'same-origin',
+                }).then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.text();
+                }).then(function(body) {
+                    ta.value = body;
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    closeHistoryModal();
+                    toast('Revision loaded. Review, then click Save to make it canonical.');
+                    ta.focus();
+                }).catch(function(err) {
+                    toast('Restore failed: ' + err.message);
+                });
+            }
+
+            window.openHistoryModal = function() {
+                historyModal.hidden = false;
+                historyModal.setAttribute('aria-hidden', 'false');
+                historyPreview.hidden = true;
+                historyList.innerHTML = 'Loading…';
+                historyFilterCount.textContent = '';
+                fetch('/api/list-revisions?slug=' + encodeURIComponent(articleSlug), {
+                    credentials: 'same-origin',
+                }).then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                }).then(function(revs) {
+                    historyRevisions = revs || [];
+                    applyHistoryFilter();
+                }).catch(function(err) {
+                    historyRevisions = [];
+                    historyList.innerHTML = '<div class="history-empty">Load failed: ' + err.message + '</div>';
+                });
+            };
+
+            window.closeHistoryModal = function() {
+                historyModal.hidden = true;
+                historyModal.setAttribute('aria-hidden', 'true');
+            };
+
+            // Esc closes modals (in priority order) and any open toolbar menu.
+            document.addEventListener('keydown', function(e) {
+                if (e.key !== 'Escape') return;
+                const polishedModalEl = document.getElementById('polished-modal');
+                if (polishedModalEl && !polishedModalEl.hidden) {
+                    e.preventDefault();
+                    closePolishedModal();
+                    return;
+                }
+                if (!historyModal.hidden) {
+                    e.preventDefault();
+                    closeHistoryModal();
+                    return;
+                }
+                if (document.querySelector('.article-toolbar .menu:not([hidden])')) {
+                    e.preventDefault();
+                    closeMenus();
+                }
+            });
+
+            window.publishToLinkedIn = async function() {
+                const previewEl = document.getElementById('preview-body');
+                if (!previewEl) {
+                    toast('Preview pane not found — cannot publish.');
+                    return;
+                }
+
+                // Work on a clone so we don't disturb the visible preview.
+                const clone = previewEl.cloneNode(true);
+
+                // Replace each <img> with an italic placeholder <p>
+                // that names the source file. LinkedIn will render
+                // this as normal italic text; the operator deletes it
+                // and uses LinkedIn's image inserter to upload the
+                // real image.
+                // Tables — LinkedIn's Article editor doesn't support
+                // <table>. Rather than lose the data (the article's
+                // RACI-style table IS the central point), transform
+                // each row into a titled section: heading = first
+                // column(s), remaining cells become `<strong>Label:</strong>
+                // value` paragraphs. LinkedIn renders that cleanly.
+                //
+                // Two table shapes handled by a simple heuristic:
+                //   RECORD-ORIENTED (RACI, streams, backlog, etc.) —
+                //     first cell is a short identifier like "1", "S2",
+                //     "a." Combine first + second column into the
+                //     heading, remaining as fields.
+                //   COMPARISON (ML-DSA vs SLH-DSA, etc.) — first cell
+                //     is a full label ("Security basis"). Use it as
+                //     the heading, other columns become fields keyed
+                //     by their column header.
+                //
+                // The heuristic: firstCellSample length ≤ 6 chars +
+                // headers.length > 2 → record-oriented. Otherwise
+                // comparison. Covers the common cases; anything more
+                // exotic just falls through the comparison branch.
+                clone.querySelectorAll('table').forEach(function(table) {
+                    const allRows = Array.from(table.querySelectorAll('tr'));
+                    if (allRows.length < 2) return;
+
+                    const headerRow = table.querySelector('thead tr') || allRows[0];
+                    const headers = Array.from(headerRow.querySelectorAll('th, td')).map(function(cell) {
+                        return cell.textContent.trim();
+                    });
+                    const dataRows = allRows.filter(function(r) { return r !== headerRow; });
+                    if (dataRows.length === 0) return;
+
+                    const firstCell = dataRows[0].querySelector('td, th');
+                    const firstCellText = firstCell ? firstCell.textContent.trim() : '';
+                    const isRecordTable = firstCellText.length > 0 && firstCellText.length <= 6 && headers.length > 2;
+
+                    const container = document.createElement('div');
+                    dataRows.forEach(function(row, idx) {
+                        const cells = Array.from(row.querySelectorAll('td, th')).map(function(cell) {
+                            return cell.textContent.trim();
+                        });
+                        if (cells.length === 0) return;
+
+                        const heading = document.createElement('h3');
+                        let startIdx = 1;
+                        if (isRecordTable && cells.length > 1 && cells[1]) {
+                            heading.textContent = cells[0] + ' · ' + cells[1];
+                            startIdx = 2;
+                        } else {
+                            heading.textContent = cells[0] || 'Row ' + (idx + 1);
+                        }
+                        container.appendChild(heading);
+
+                        for (let i = startIdx; i < cells.length; i++) {
+                            if (!cells[i]) continue;
+                            const p = document.createElement('p');
+                            if (headers[i]) {
+                                const strong = document.createElement('strong');
+                                strong.textContent = headers[i] + ': ';
+                                p.appendChild(strong);
+                            }
+                            p.appendChild(document.createTextNode(cells[i]));
+                            container.appendChild(p);
+                        }
+                    });
+
+                    const parent = table.parentNode;
+                    if (!parent) return;
+                    while (container.firstChild) {
+                        parent.insertBefore(container.firstChild, table);
+                    }
+                    parent.removeChild(table);
+                });
+
+                const imgs = clone.querySelectorAll('img');
+                imgs.forEach(function(img) {
+                    const src = img.getAttribute('src') || '';
+                    let filename = 'image';
+                    try {
+                        const url = new URL(src, window.location.origin);
+                        filename = url.searchParams.get('name') || 'image';
+                    } catch (e) {
+                        // src wasn't a real URL — leave filename as-is
+                    }
+                    const alt = img.getAttribute('alt') || '';
+                    const altSuffix = alt ? ' (' + alt + ')' : '';
+                    const placeholder = document.createElement('p');
+                    const em = document.createElement('em');
+                    em.textContent = '[image: ' + filename + altSuffix + ' — upload here via LinkedIn image inserter]';
+                    placeholder.appendChild(em);
+                    if (img.parentNode) {
+                        img.parentNode.replaceChild(placeholder, img);
+                    }
+                });
+
+                const html = clone.innerHTML;
+                const plainText = clone.textContent || clone.innerText || '';
+
+                let copied = false;
+                if (navigator.clipboard && window.ClipboardItem) {
+                    try {
+                        const item = new ClipboardItem({
+                            'text/html': new Blob([html], { type: 'text/html' }),
+                            'text/plain': new Blob([plainText], { type: 'text/plain' }),
+                        });
+                        await navigator.clipboard.write([item]);
+                        copied = true;
+                        toast('Article copied (rich text). LinkedIn opening — paste into the body area.');
+                    } catch (err) {
+                        console.warn('rich-text clipboard write failed, falling back to plain text:', err);
+                    }
+                }
+                if (!copied) {
+                    try {
+                        await navigator.clipboard.writeText(plainText);
+                        toast('Rich-text clipboard blocked; plain text copied instead. Format will need to be redone in LinkedIn.');
+                    } catch (err2) {
+                        toast('Clipboard write failed — check browser console.');
+                        console.error('publishToLinkedIn plain-text fallback failed:', err2);
+                        return;
+                    }
+                }
+
+                // Delay so the toast is visible before LinkedIn steals focus.
+                setTimeout(function() {
+                    window.open('https://www.linkedin.com/article/new/', '_blank', 'noopener,noreferrer');
+                }, 250);
+            };
+
+            function copyToClipboard(text, message) {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(
+                        function() { toast(message); },
+                        function() { fallbackCopy(text, message); }
+                    );
+                } else {
+                    fallbackCopy(text, message);
+                }
+            }
+
+            function fallbackCopy(text, message) {
+                const stage = document.getElementById('copy-staging');
+                stage.value = text;
+                stage.select();
+                try {
+                    document.execCommand('copy');
+                    toast(message);
+                } catch (e) {
+                    toast('Copy failed — your browser blocked clipboard access.');
+                }
+            }
+
+            function toast(message) {
+                const el = document.querySelector('.save-result');
+                el.innerHTML = '<span class="form-result ok">' + message + '</span>';
+                setTimeout(function() { el.innerHTML = ''; }, 4000);
+            }
+
+            // Accept: pull the polished raw markdown out of its hidden
+            // textarea and into the editor. Triggers an `input` event
+            // so the live preview + word count update. Save remains a
+            // separate explicit click — Accept does NOT auto-save, so
+            // the operator can still tweak before committing.
+            const polishedModal = document.getElementById('polished-modal');
+            const polishedContent = document.getElementById('polished-content');
+
+            // Elapsed-time counter for the loading state. Started on
+            // transform kickoff, cleared on any terminal transition
+            // (success / error / cancel / close).
+            let transformStartTime = 0;
+            let elapsedInterval = null;
+
+            function stopElapsed() {
+                if (elapsedInterval) {
+                    clearInterval(elapsedInterval);
+                    elapsedInterval = null;
+                }
+            }
+
+            // showPolishedModal(state) opens the modal and switches into
+            // the given state ('loading' | 'error' | 'content'). Called
+            // with no arg preserves whatever state is already set (used
+            // by the body-level after-swap listener that fires *after*
+            // state has been flipped to 'content' by the transform-
+            // afterSwap handler below).
+            window.showPolishedModal = function(state) {
+                if (!polishedModal) return;
+                if (state) polishedModal.setAttribute('data-state', state);
+                polishedModal.hidden = false;
+                polishedModal.setAttribute('aria-hidden', 'false');
+                // Focus the most relevant button in the current state.
+                // Loading → Cancel (so operator can bail with Space).
+                // Error → Close.
+                // Content → close X (existing behavior).
+                const s = polishedModal.getAttribute('data-state');
+                let focusBtn = null;
+                if (s === 'loading') focusBtn = polishedModal.querySelector('.polished-cancel');
+                else if (s === 'error') focusBtn = polishedModal.querySelector('.error-close');
+                else focusBtn = polishedModal.querySelector('.polished-close');
+                if (focusBtn) focusBtn.focus();
+            };
+
+            window.closePolishedModal = function() {
+                if (!polishedModal) return;
+                // If a transform is in-flight, dispatch abort so the XHR
+                // gets cancelled and the server-side context propagates
+                // through (LLM call may still complete but we discard).
+                if (polishedModal.getAttribute('data-state') === 'loading') {
+                    const btn = document.querySelector('.article-toolbar button.transform');
+                    if (btn && window.htmx) htmx.trigger(btn, 'htmx:abort');
+                }
+                stopElapsed();
+                polishedModal.hidden = true;
+                polishedModal.setAttribute('aria-hidden', 'true');
+                polishedModal.setAttribute('data-state', 'idle');
+                if (polishedContent) polishedContent.innerHTML = '';
+            };
+
+            // Cancel button inside the loading state. Delegates to
+            // closePolishedModal which also handles the htmx abort so
+            // we have exactly one abort path.
+            window.cancelTransform = function() {
+                closePolishedModal();
+            };
+
+            // Wire the Transform button's state transitions. hx-on::
+            // attributes on the button would work too but centralising
+            // here keeps the button markup thin and lets us reuse the
+            // same listener for future transforms (Chat regenerate,
+            // etc).
+            const transformBtn = document.querySelector('.article-toolbar button.transform');
+            if (transformBtn) {
+                transformBtn.addEventListener('htmx:beforeRequest', function() {
+                    transformStartTime = Date.now();
+                    const elapsedEl = document.getElementById('polished-elapsed');
+                    if (elapsedEl) elapsedEl.textContent = '0s';
+                    stopElapsed();
+                    elapsedInterval = setInterval(function() {
+                        if (!elapsedEl) return;
+                        const s = Math.floor((Date.now() - transformStartTime) / 1000);
+                        elapsedEl.textContent = s + 's';
+                    }, 1000);
+                    showPolishedModal('loading');
+                });
+
+                function handleTransformError(evt) {
+                    stopElapsed();
+                    const msg = (evt && evt.detail && evt.detail.xhr && evt.detail.xhr.responseText)
+                        ? evt.detail.xhr.responseText
+                        : 'The request failed before a response arrived (network, server offline, or timeout).';
+                    const errEl = document.getElementById('polished-error-message');
+                    if (errEl) errEl.textContent = msg;
+                    polishedModal.setAttribute('data-state', 'error');
+                    showPolishedModal();
+                }
+                transformBtn.addEventListener('htmx:responseError', handleTransformError);
+                transformBtn.addEventListener('htmx:sendError', handleTransformError);
+                transformBtn.addEventListener('htmx:timeout', handleTransformError);
+            }
+
+            // Body-level after-swap: when polished-content is populated
+            // by htmx, flip the modal into 'content' state. Runs on the
+            // swap target (polished-content), which is why an
+            // hx-on::after-swap on the Transform button would miss —
+            // events don't bubble from the target to a non-ancestor
+            // origin. Same fix as today.html's capture-detail modal.
+            document.body.addEventListener('htmx:afterSwap', function(evt) {
+                if (evt.target && evt.target.id === 'polished-content' && polishedContent && polishedContent.innerHTML.trim() !== '') {
+                    stopElapsed();
+                    polishedModal.setAttribute('data-state', 'content');
+                    showPolishedModal();
+                }
+            });
+
+            window.acceptPolished = function() {
+                const polishedEl = document.getElementById('polished-raw');
+                if (!polishedEl) return;
+                ta.value = polishedEl.value;
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+                closePolishedModal();
+                toast('Polished draft loaded into editor. Click Save when ready.');
+                ta.focus();
+            };
+
+            window.discardPolished = function() {
+                closePolishedModal();
+            };
+
+            window.copyPolished = function() {
+                const polishedEl = document.getElementById('polished-raw');
+                if (!polishedEl) return;
+                copyToClipboard(polishedEl.value, 'Polished Markdown copied.');
+            };
+
+            // Tab switching for the right pane. Clicking a tab swaps the
+            // visible panel; switching to Chat auto-scrolls the message
+            // log to the bottom (most-recent turn).
+            document.querySelectorAll('.tab-bar .tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.tab-bar .tab').forEach(function(t) { t.classList.remove('active'); });
+                    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+                    tab.classList.add('active');
+                    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+                    if (tab.dataset.tab === 'chat') scrollChatToBottom();
+                });
+            });
+
+            window.scrollChatToBottom = function() {
+                const msgs = document.getElementById('chat-messages');
+                if (msgs) msgs.scrollTop = msgs.scrollHeight;
+            };
+
+            // Auto-scroll on initial load if the operator lands on
+            // /article with an existing thread.
+            scrollChatToBottom();
+
+            // Insert-into-draft: append the assistant reply to the editor
+            // textarea (with a separator) and trigger an input event so
+            // the live preview + word count update. Does NOT save; the
+            // operator hits Save when ready.
+            window.insertIntoDraft = function(btn) {
+                const raw = btn.parentElement.querySelector('.bubble-raw');
+                if (!raw) return;
+                const sep = ta.value && !ta.value.endsWith('\n\n') ? '\n\n' : '';
+                ta.value = ta.value + sep + raw.value + '\n';
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+                toast('Reply inserted into draft. Click Save when ready.');
+            };
+
+            window.copyChatReply = function(btn) {
+                const raw = btn.parentElement.querySelector('.bubble-raw');
+                if (!raw) return;
+                copyToClipboard(raw.value, 'Reply copied.');
+            };
+
+            // Optimistic chat send: the moment the operator hits Send,
+            // their bubble lands in the chat log and an animated
+            // 'claude is working' placeholder appears below it. Server
+            // response (htmx target=#chat-thinking-placeholder,
+            // swap=outerHTML) replaces the placeholder with the
+            // assistant reply (success) or an error bubble (failure).
+            // The user bubble stays in either case so they don't lose
+            // context on a failure.
+            // hx-target on the chat form is #chat-messages (always
+            // exists, prevents htmx:targetError). Server returns
+            // ONLY the assistant bubble; we render the user bubble
+            // and the 'claude · working' placeholder ourselves
+            // before the request, and remove the placeholder after.
+            // The placeholder is found by CSS class on the
+            // after-request, not by ID — so htmx's target resolution
+            // never depends on something this JS created.
+            // Chat attachments — images pasted into the chat input this
+            // turn. Filenames accumulate in chatAttachedFilenames,
+            // rendered as thumbnails in #chat-attach-strip, cleared on
+            // successful send. The hidden #chat-attachments field
+            // carries them to the server as a comma-separated list.
+            const chatAttachStrip = document.getElementById('chat-attach-strip');
+            const chatAttachInput = document.getElementById('chat-attachments');
+            let chatAttachedFilenames = [];
+
+            function syncChatAttachField() {
+                chatAttachInput.value = chatAttachedFilenames.join(',');
+                if (chatAttachedFilenames.length === 0) {
+                    chatAttachStrip.hidden = true;
+                } else {
+                    chatAttachStrip.hidden = false;
+                }
+            }
+
+            function removeChatAttachment(filename) {
+                chatAttachedFilenames = chatAttachedFilenames.filter(function(f) { return f !== filename; });
+                const thumb = chatAttachStrip.querySelector('.chat-attach-thumb[data-name="' + filename + '"]');
+                if (thumb) thumb.remove();
+                syncChatAttachField();
+            }
+
+            function addChatAttachmentThumb(blob) {
+                // Placeholder thumb inserted immediately — shows a
+                // preview of what will be uploaded. On success the
+                // dataset.name gets set and the loading class is
+                // stripped. On failure the thumb is removed.
+                const thumb = document.createElement('div');
+                thumb.className = 'chat-attach-thumb uploading';
+                const url = URL.createObjectURL(blob);
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = 'pasted image';
+                thumb.appendChild(img);
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'thumb-remove';
+                remove.title = 'Remove this image from the send';
+                remove.textContent = '×';
+                thumb.appendChild(remove);
+                chatAttachStrip.appendChild(thumb);
+                chatAttachStrip.hidden = false;
+
+                const form = new FormData();
+                form.append('slug', articleSlug);
+                form.append('image', blob, 'chat-pasted.' + (blob.type.split('/')[1] || 'bin'));
+
+                fetch('/api/upload-attachment', {
+                    method: 'POST',
+                    body: form,
+                    credentials: 'same-origin',
+                }).then(function(res) {
+                    if (!res.ok) {
+                        return res.text().then(function(txt) {
+                            throw new Error(res.status + ': ' + (txt || res.statusText));
+                        });
+                    }
+                    return res.json();
+                }).then(function(data) {
+                    thumb.classList.remove('uploading');
+                    thumb.dataset.name = data.filename;
+                    chatAttachedFilenames.push(data.filename);
+                    remove.addEventListener('click', function() {
+                        removeChatAttachment(data.filename);
+                    });
+                    syncChatAttachField();
+                }).catch(function(err) {
+                    console.warn('chat image upload failed:', err);
+                    thumb.remove();
+                    if (chatAttachStrip.children.length === 0) chatAttachStrip.hidden = true;
+                    toast('Image upload failed — see console.');
+                });
+            }
+
+            // Paste handler on the chat message textarea. Intercepts
+            // image data, uploads via the same endpoint the editor
+            // uses, adds a thumbnail to the strip.
+            const chatMessageTa = document.querySelector('form.chat-input textarea[name=message]');
+            if (chatMessageTa) {
+                chatMessageTa.addEventListener('paste', function(e) {
+                    const items = (e.clipboardData && e.clipboardData.items) ? e.clipboardData.items : [];
+                    let handled = false;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+                            const blob = items[i].getAsFile();
+                            if (blob) {
+                                addChatAttachmentThumb(blob);
+                                handled = true;
+                            }
+                        }
+                    }
+                    if (handled) e.preventDefault();
+                });
+            }
+
+            window.prepareChatSubmit = function(form) {
+                const inputTa = form.querySelector('textarea[name=message]');
+                const message = inputTa ? inputTa.value.trim() : '';
+                const hasImages = chatAttachedFilenames.length > 0;
+                if (!message && !hasImages) return;
+
+                const msgList = document.getElementById('chat-messages');
+                if (!msgList) return;
+
+                // Remove the empty-state hint if it's still there.
+                const empty = msgList.querySelector('.chat-empty');
+                if (empty) empty.remove();
+
+                // Defensive cleanup of any prior placeholder that
+                // somehow survived a failure.
+                msgList.querySelectorAll('.chat-thinking-bubble').forEach(function(n) { n.remove(); });
+
+                // User bubble — text (if any) + inline thumbnails for
+                // any images being sent this turn. Same shape the
+                // server-rendered persisted bubble will land in on
+                // reload thanks to MarkdownForArticle rewriting
+                // ![](attachments/…) to /api/attachment URLs.
+                const userBubble = document.createElement('div');
+                userBubble.className = 'chat-bubble chat-user';
+                const userMeta = document.createElement('div');
+                userMeta.className = 'bubble-meta';
+                userMeta.textContent = 'You · just now';
+                const userContent = document.createElement('div');
+                userContent.className = 'bubble-content';
+                if (message) userContent.textContent = message;
+                userBubble.appendChild(userMeta);
+                userBubble.appendChild(userContent);
+                if (hasImages) {
+                    const imgStrip = document.createElement('div');
+                    imgStrip.className = 'bubble-images';
+                    imgStrip.style.cssText = 'display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.5rem;';
+                    chatAttachedFilenames.forEach(function(name) {
+                        const img = document.createElement('img');
+                        img.src = '/api/attachment?slug=' + encodeURIComponent(articleSlug) + '&name=' + encodeURIComponent(name);
+                        img.alt = name;
+                        img.style.cssText = 'max-width:200px; max-height:200px; border:1px solid rgba(0,0,0,0.15); border-radius:6px;';
+                        imgStrip.appendChild(img);
+                    });
+                    userBubble.appendChild(imgStrip);
+                }
+                msgList.appendChild(userBubble);
+
+                // 'Claude is working' placeholder. Removed in
+                // finalizeChatSubmit on after-request.
+                const thinking = document.createElement('div');
+                thinking.className = 'chat-bubble chat-assistant chat-thinking-bubble';
+                thinking.innerHTML =
+                    '<div class="bubble-meta">Assistant · working…</div>' +
+                    '<div class="bubble-content"><span class="thinking-dots">' +
+                    '<span></span><span></span><span></span></span></div>';
+                msgList.appendChild(thinking);
+
+                scrollChatToBottom();
+            };
+
+            window.finalizeChatSubmit = function(form, event) {
+                // Remove the thinking placeholder regardless of
+                // success — the server response (or an error bubble)
+                // takes its place.
+                const msgList = document.getElementById('chat-messages');
+                const placeholder = msgList ? msgList.querySelector('.chat-thinking-bubble') : null;
+
+                if (event.detail && event.detail.successful) {
+                    if (placeholder) placeholder.remove();
+                    const inputTa = form.querySelector('textarea[name=message]');
+                    if (inputTa) inputTa.value = '';
+                    // Clear the attachment strip + hidden field for
+                    // the next turn.
+                    chatAttachedFilenames = [];
+                    chatAttachStrip.innerHTML = '';
+                    chatAttachStrip.hidden = true;
+                    chatAttachInput.value = '';
+                    scrollChatToBottom();
+                    return;
+                }
+                // Failed: replace the placeholder with an inline error
+                // bubble. The user's typed-in message + pasted images
+                // stay so they can retry without re-doing it all.
+                if (placeholder) {
+                    const err = document.createElement('div');
+                    err.className = 'chat-bubble chat-error';
+                    err.textContent = 'Send failed — network or server error. Your message stays in the box; try again.';
+                    placeholder.replaceWith(err);
+                }
+                scrollChatToBottom();
+            };
+
+            // Sources tab: URL ↔ Text sub-tab switcher (within the
+            // add-source form area).
+            document.querySelectorAll('.sources-add .kind-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    const wantedKind = tab.dataset.kind;
+                    document.querySelectorAll('.sources-add .kind-tab').forEach(function(t) { t.classList.remove('active'); });
+                    document.querySelectorAll('.sources-add form').forEach(function(f) { f.classList.remove('active'); });
+                    tab.classList.add('active');
+                    const target = document.querySelector('.sources-add form[data-kind="' + wantedKind + '"]');
+                    if (target) target.classList.add('active');
+                });
+            });
+
+            // When the URL-form add-source hits a fetch failure the
+            // server can't fix (Cloudflare 403 that Wayback also
+            // couldn't cover, timeout, unreachable host), append a
+            // "Paste manually →" button to the error toast that
+            // switches into the Text tab and pre-fills the URL field
+            // so the operator can drop content in without re-typing.
+            //
+            // Detection is on the returned error fragment text —
+            // handleAddSource returns HTTP 200 with a form-result.err
+            // div (so htmx doesn't route through :responseError), and
+            // the workflow's error message ends with a "Text tab"
+            // nudge which we pattern-match here.
+            const urlForm = document.querySelector('.sources-add form[data-kind="url"]');
+            const textForm = document.querySelector('.sources-add form[data-kind="text"]');
+            if (urlForm && textForm) {
+                urlForm.addEventListener('htmx:afterSwap', function(evt) {
+                    if (!evt.target || !evt.target.classList || !evt.target.classList.contains('add-result')) return;
+                    const errNode = evt.target.querySelector('.form-result.err');
+                    if (!errNode) return;
+                    const text = errNode.textContent || '';
+                    // Trigger patterns: our workflow's manual-paste nudge,
+                    // any HTTP 4xx/5xx surfaced by userFacingError, and
+                    // network-shape errors from Go's http client.
+                    const looksBlocked = /Text tab|HTTP\s+[45]\d\d|fetch failed|Wayback|ECONN|ENOTFOUND|timeout/i.test(text);
+                    if (!looksBlocked) return;
+                    if (errNode.querySelector('.paste-manual-btn')) return; // don't duplicate
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'paste-manual-btn';
+                    btn.textContent = 'Paste manually →';
+                    btn.style.cssText = 'margin-left: var(--space-3); padding: 4px 10px; font-size: 0.85rem; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: var(--radius-sm); cursor: pointer;';
+                    btn.addEventListener('click', function() {
+                        const url = urlForm.querySelector('input[name=url]').value.trim();
+                        const title = urlForm.querySelector('input[name=title]').value.trim();
+                        const textTab = document.querySelector('.sources-add .kind-tab[data-kind="text"]');
+                        if (textTab) textTab.click();
+                        if (url) textForm.querySelector('input[name=url]').value = url;
+                        if (title) textForm.querySelector('input[name=title]').value = title;
+                        const ta = textForm.querySelector('textarea[name=text]');
+                        if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+                    });
+                    errNode.appendChild(btn);
+                });
+            }
+        })();
+    </script>
+
+    {{define "chat-turn"}}
+    {{/* User bubble is added client-side by prepareChatSubmit for
+         immediate visual feedback; this template returns ONLY the
+         assistant bubble, which replaces #chat-thinking-placeholder
+         via hx-swap=outerHTML. */}}
+    <div class="chat-bubble chat-assistant">
+        <div class="bubble-meta">Assistant · <code>{{.Model}}</code> · {{.ElapsedSec}}s · {{.InputTokens}} → {{.OutputTokens}} tok{{if not .Persisted}} · <span class="warn">not saved to disk</span>{{end}}</div>
+        <div class="bubble-meta context-meta" title="What the model actually saw in its input context this turn. If a source you added doesn't appear here, it was dropped for hitting the total-sources budget (32KB) — reduce, prioritise, or shorten summaries.">
+            context:
+            {{with .SourcesCount}} {{.}} src {{end}}{{with $.SourcesKB}}({{.}}){{end}}
+            {{with .ProfileKB}} · profile {{.}}{{end}}
+            {{with .ToneCount}} · {{.}} tone {{end}}{{with $.ToneKB}}({{.}}){{end}}
+            {{with .DraftKB}} · draft {{.}}{{end}}
+            {{with .HistoryTurns}} · history {{.}} turns{{end}}
+        </div>
+        <div class="bubble-content markdown-body">{{.ReplyHTML}}</div>
+        <div class="bubble-actions">
+            <button type="button" onclick="insertIntoDraft(this)" title="Append this reply to the editor on the left.">Insert into draft</button>
+            <button type="button" onclick="copyChatReply(this)" title="Copy this reply's Markdown to your clipboard.">Copy</button>
+            <textarea class="bubble-raw" hidden>{{.Reply}}</textarea>
+        </div>
+    </div>
+    {{end}}
+
+    {{define "polished-result"}}
+    <section class="polished-pane">
+        <div class="polished-header">
+            <span class="pane-label">Polished</span>
+            <span class="polished-meta">
+                <code>{{.Model}}</code> · {{.ElapsedSec}}s · {{.InputTokens}} → {{.OutputTokens}} tokens
+                {{if not .HasProfile}} · <span class="warn">no profile.md</span>{{end}}
+                {{if eq .ToneCount 0}} · <span class="warn">no tone samples</span>{{else}} · {{.ToneCount}} tone samples{{end}}
+            </span>
+            <span class="polished-actions">
+                <button type="button" class="primary" onclick="acceptPolished()" title="Replace the editor's content with the polished draft. Does NOT save — click Save afterward when you're happy.">Accept (load to editor)</button>
+                <button type="button" onclick="copyPolished()" title="Copy the polished Markdown to clipboard.">Copy</button>
+                <button type="button" onclick="discardPolished()" title="Throw away the polished result. Your editor draft is untouched.">Discard</button>
+            </span>
+        </div>
+        <textarea id="polished-raw" hidden>{{.Polished}}</textarea>
+        <div class="polished-rendered markdown-body">{{.PolishedHTML}}</div>
+        <details>
+            <summary>View as Markdown</summary>
+            <pre class="polished-source">{{.Polished}}</pre>
+        </details>
+    </section>
+    {{end}}
+</body>
+</html>
