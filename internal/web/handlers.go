@@ -317,7 +317,71 @@ func chatError(w http.ResponseWriter, msg string) {
 const (
 	maxChatMessage   = 64 * 1024
 	maxImagesPerTurn = 8
+	chatTimeout      = 120 * time.Second
 )
+
+// chatInput is one conversation turn, independent of how it arrived
+// (editor form or JSON API).
+type chatInput struct {
+	Slug, Draft, Message string
+	Images               []llm.ImageRef
+	ImageRefs            []string // Markdown refs saved with the user turn
+	Client               *llm.Client
+	History              bool // send the saved thread as context
+	Persist              bool // append this turn to chat.md
+}
+
+type chatOutput struct {
+	Result    *llm.ChatResult
+	Persisted bool
+}
+
+// chatTurn runs one turn: gather context, call the model, and append
+// the pair to the thread when asked. Shared by the editor and the API
+// so both send the model exactly the same thing.
+func (s *server) chatTurn(ctx context.Context, in chatInput) (*chatOutput, error) {
+	var turns []llm.ChatTurn
+	if in.History {
+		history, err := s.cfg.Store.Chat(in.Slug)
+		if err != nil {
+			log.Printf("chat %s: history: %v", in.Slug, err)
+		}
+		turns = make([]llm.ChatTurn, 0, len(history))
+		for _, t := range history {
+			turns = append(turns, llm.ChatTurn{Role: t.Role, Content: t.Content})
+		}
+	}
+	profile, tone := s.voice()
+	res, err := in.Client.Chat(ctx, llm.ChatRequest{
+		ArticleTitle: s.title(in.Slug),
+		RawDraft:     in.Draft,
+		Profile:      profile,
+		ToneSamples:  tone,
+		Sources:      s.sourceRefs(in.Slug),
+		History:      turns,
+		UserMessage:  in.Message,
+		Images:       in.Images,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := &chatOutput{Result: res}
+	if !in.Persist {
+		return out, nil
+	}
+	// The saved user turn carries image references so the bubble
+	// re-renders on reload; later turns see them only as text.
+	saved := in.Message
+	if len(in.ImageRefs) > 0 {
+		saved = in.Message + "\n\n" + strings.Join(in.ImageRefs, "\n")
+	}
+	if err := s.cfg.Store.AppendChat(in.Slug, saved, res.Reply); err != nil {
+		log.Printf("chat %s: persist: %v", in.Slug, err)
+		return out, nil
+	}
+	out.Persisted = true
+	return out, nil
+}
 
 func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -362,44 +426,24 @@ func (s *server) handleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	history, err := s.cfg.Store.Chat(slug)
-	if err != nil {
-		log.Printf("chat %s: history: %v", slug, err)
-	}
-	turns := make([]llm.ChatTurn, 0, len(history))
-	for _, t := range history {
-		turns = append(turns, llm.ChatTurn{Role: t.Role, Content: t.Content})
-	}
-	profile, tone := s.voice()
-	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), chatTimeout)
 	defer cancel()
-	res, err := s.cfg.LLM.Chat(ctx, llm.ChatRequest{
-		ArticleTitle: s.title(slug),
-		RawDraft:     r.PostFormValue("body"),
-		Profile:      profile,
-		ToneSamples:  tone,
-		Sources:      s.sourceRefs(slug),
-		History:      turns,
-		UserMessage:  msg,
-		Images:       images,
+	turn, err := s.chatTurn(ctx, chatInput{
+		Slug:      slug,
+		Draft:     r.PostFormValue("body"),
+		Message:   msg,
+		Images:    images,
+		ImageRefs: imageRefs,
+		Client:    s.cfg.LLM,
+		History:   true,
+		Persist:   true,
 	})
 	if err != nil {
 		log.Printf("chat %s: model: %v", slug, err)
 		chatError(w, "Chat call failed: "+errClause(err))
 		return
 	}
-
-	// The saved user turn carries image references so the bubble
-	// re-renders on reload; later turns see them only as text.
-	saved := msg
-	if len(imageRefs) > 0 {
-		saved = msg + "\n\n" + strings.Join(imageRefs, "\n")
-	}
-	persisted := true
-	if err := s.cfg.Store.AppendChat(slug, saved, res.Reply); err != nil {
-		log.Printf("chat %s: persist: %v", slug, err)
-		persisted = false
-	}
+	res, persisted := turn.Result, turn.Persisted
 	replyHTML, err := render.MarkdownForArticle(res.Reply, slug)
 	if err != nil {
 		replyHTML = template.HTML(template.HTMLEscapeString(res.Reply))
