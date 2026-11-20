@@ -21,6 +21,9 @@ type auth struct {
 	token   string
 	session string // expected cookie value
 	secure  bool
+	// apiToken, when set, is the only credential /api/v1/ accepts,
+	// and it is accepted nowhere else.
+	apiToken string
 }
 
 func newAuth(token string, secure bool) *auth {
@@ -56,6 +59,15 @@ func public(path string) bool {
 
 func (a *auth) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a.apiToken != "" && strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			h := r.Header.Get("Authorization")
+			if strings.HasPrefix(h, "Bearer ") && equal(strings.TrimPrefix(h, "Bearer "), a.apiToken) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			apiError(w, http.StatusUnauthorized, "API token required")
+			return
+		}
 		if public(r.URL.Path) || a.ok(r) {
 			next.ServeHTTP(w, r)
 			return

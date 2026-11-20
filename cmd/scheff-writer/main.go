@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -55,6 +57,23 @@ func main() {
 		log.Print("warn: WRITER_ALLOW_NO_AUTH=1, so anyone who can reach this port can edit. Bind to localhost only.")
 	}
 
+	apiToken := os.Getenv("WRITER_API_TOKEN")
+	var apiModels []string
+	if v := os.Getenv("WRITER_API_MODELS"); v != "" {
+		apiModels = strings.Split(v, ",")
+	}
+	apiMax := 0
+	if v := os.Getenv("WRITER_API_MAX_CONCURRENT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			log.Fatal("WRITER_API_MAX_CONCURRENT must be a positive integer")
+		}
+		apiMax = n
+	}
+	if apiToken != "" {
+		log.Print("JSON API on at /api/v1/ (WRITER_API_TOKEN set)")
+	}
+
 	h, err := web.New(web.Config{
 		Store:          st,
 		LLM:            model,
@@ -63,6 +82,10 @@ func main() {
 		InsecureCookie: os.Getenv("WRITER_INSECURE_COOKIE") == "1",
 		HomeURL:        os.Getenv("WRITER_HOME_URL"),
 		ProjectURL:     os.Getenv("WRITER_PROJECT_URL"),
+
+		APIToken:         apiToken,
+		APIModels:        apiModels,
+		APIMaxConcurrent: apiMax,
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -52,12 +52,26 @@ type Config struct {
 	// ProjectURL, when set, is a prefix the slug is appended to for a
 	// "Project page" link, e.g. "https://host:8444/project?slug=".
 	ProjectURL string
+
+	// APIToken turns on the JSON API under /api/v1/ (see api.go). It
+	// must differ from Token and be at least 16 characters. Empty
+	// leaves the API off.
+	APIToken string
+	// APIModels lists the model aliases an API request may pick.
+	// The configured LLM model is always allowed; empty allows only it.
+	APIModels []string
+	// APIMaxConcurrent caps API calls in flight; extra calls get 429.
+	// Zero means 4.
+	APIMaxConcurrent int
 }
 
 type server struct {
 	cfg  Config
 	tpl  *template.Template
 	auth *auth
+
+	apiModels map[string]bool
+	apiSem    chan struct{}
 }
 
 // New builds the HTTP handler.
@@ -68,10 +82,30 @@ func New(cfg Config) (http.Handler, error) {
 	if cfg.Token == "" && !cfg.AllowNoAuth {
 		return nil, errors.New("web: a sign-in token is required (or explicitly allow no auth)")
 	}
+	if cfg.APIToken != "" {
+		if len(cfg.APIToken) < 16 {
+			return nil, errors.New("web: the API token must be at least 16 characters")
+		}
+		if cfg.APIToken == cfg.Token {
+			return nil, errors.New("web: the API token must differ from the sign-in token")
+		}
+	}
 	if cfg.LLM == nil {
 		cfg.LLM = llm.New("", "", "")
 	}
-	s := &server{cfg: cfg}
+	if cfg.APIMaxConcurrent <= 0 {
+		cfg.APIMaxConcurrent = defaultAPIMaxConcurrent
+	}
+	s := &server{
+		cfg:       cfg,
+		apiModels: map[string]bool{cfg.LLM.Model: true},
+		apiSem:    make(chan struct{}, cfg.APIMaxConcurrent),
+	}
+	for _, m := range cfg.APIModels {
+		if m = strings.TrimSpace(m); m != "" {
+			s.apiModels[m] = true
+		}
+	}
 	funcs := template.FuncMap{
 		"homeURL": func() string { return cfg.HomeURL },
 		"model": func() string {
@@ -93,6 +127,7 @@ func New(cfg Config) (http.Handler, error) {
 	}
 	s.tpl = tpl
 	s.auth = newAuth(cfg.Token, !cfg.InsecureCookie)
+	s.auth.apiToken = cfg.APIToken
 
 	mux := http.NewServeMux()
 	staticSub, _ := fs.Sub(staticFiles, "static")
@@ -122,6 +157,9 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /api/attachment", s.handleAttachment)
 	mux.HandleFunc("GET /api/list-revisions", s.handleListRevisions)
 	mux.HandleFunc("GET /api/load-revision", s.handleLoadRevision)
+	if cfg.APIToken != "" {
+		mux.HandleFunc("POST /api/v1/projects/{slug}/chat", s.handleAPIChat)
+	}
 
 	var h http.Handler = mux
 	h = s.auth.middleware(h)
