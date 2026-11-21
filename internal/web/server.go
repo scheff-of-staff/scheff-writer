@@ -53,6 +53,10 @@ type Config struct {
 	// "Project page" link, e.g. "https://host:8444/project?slug=".
 	ProjectURL string
 
+	// Fetcher fetches URL sources (forager). Nil leaves "add by URL"
+	// off; pasted text and PDF uploads still work.
+	Fetcher SourceFetcher
+
 	// APIToken turns on the JSON API under /api/v1/ (see api.go). It
 	// must differ from Token and be at least 16 characters. Empty
 	// leaves the API off.
@@ -72,6 +76,7 @@ type server struct {
 
 	apiModels map[string]bool
 	apiSem    chan struct{}
+	sourceSem chan struct{}
 }
 
 // New builds the HTTP handler.
@@ -100,6 +105,7 @@ func New(cfg Config) (http.Handler, error) {
 		cfg:       cfg,
 		apiModels: map[string]bool{cfg.LLM.Model: true},
 		apiSem:    make(chan struct{}, cfg.APIMaxConcurrent),
+		sourceSem: make(chan struct{}, maxSourcesAtOnce),
 	}
 	for _, m := range cfg.APIModels {
 		if m = strings.TrimSpace(m); m != "" {

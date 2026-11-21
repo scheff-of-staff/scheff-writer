@@ -1,4 +1,4 @@
-VERSION ?= 0.2.0
+VERSION ?= 0.3.0
 IMAGE   ?= ghcr.io/scheff-of-staff/scheff-writer
 
 .PHONY: build test vet check run image ship clean

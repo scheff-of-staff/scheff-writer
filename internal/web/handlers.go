@@ -488,12 +488,6 @@ func (s *server) handleChatReset(w http.ResponseWriter, r *http.Request) {
 
 // --- sources ---------------------------------------------------------
 
-// handleAddSource is a placeholder until source ingest moves into the
-// writer (fetch through forager, extract with the model).
-func (s *server) handleAddSource(w http.ResponseWriter, r *http.Request) {
-	fragmentErr(w, "Adding sources arrives in the next writer release. Existing sources still work in Transform and Chat.")
-}
-
 func (s *server) handleRemoveSource(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)

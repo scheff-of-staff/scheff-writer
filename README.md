@@ -11,11 +11,10 @@ by pointing it at the vault, where it owns each project's body and
 its `sources/`, `revisions/`, `attachments/` and `chat.md`
 (see the Scheff contracts, §1 and §3).
 
-**Status: 0.2.0.** Editor, preview, autosave and revision history,
-Transform, chat, image paste and source removal work, and chat is
-also available as a JSON API (`/api/v1/`). Adding new
-sources (fetched through forager) arrives in the next release; until
-then the add-source form reports that it isn't available yet.
+**Status: 0.3.0.** Editor, preview, autosave and revision history,
+Transform, chat, image paste, and sources (add by URL, pasted text or
+PDF upload; remove) all work. Chat is also available as a JSON API
+(`/api/v1/`).
 
 ## Run it
 
@@ -35,7 +34,7 @@ As a container:
 docker run --rm -p 127.0.0.1:8445:8445 \
   -e WRITER_ROOT=/data -e WRITER_TOKEN="$(openssl rand -hex 24)" \
   -e WRITER_LLM_URL=... -e WRITER_LLM_KEY=... -e WRITER_MODEL=... \
-  -v ~/writing:/data ghcr.io/scheff-of-staff/scheff-writer:0.2.0
+  -v ~/writing:/data ghcr.io/scheff-of-staff/scheff-writer:0.3.0
 ```
 
 The container runs as a non-root user; give it a uid that can write
@@ -56,6 +55,16 @@ the mounted folder (`--user 1000:1000` or similar).
 - **Drafts are untrusted input to the model.** The prompts say so, and
   neither Transform nor chat writes anything on the model's say-so:
   Transform output is shown for review, and only Accept saves it.
+- **The writer never fetches URLs itself.** URL sources go through
+  [forager](https://github.com/scheff-of-staff/forager) (0.4 or
+  newer), which refuses private and internal addresses, so an author
+  can't point it at the host's own network. Without forager
+  configured, only pasted text and PDF uploads are available.
+- **Sources are untrusted input too.** Fetched pages, pasted text and
+  PDFs go to the model with an instruction to ignore anything inside
+  them and return JSON only; nothing in a source is executed or
+  followed. PDF uploads are checked by content (`%PDF-`), capped at
+  30 MB, and read in memory; only the extract is saved, never the file.
 - Run it behind TLS (Tailscale Serve, a reverse proxy) on a private
   network. It is a single-author tool, not a multi-user service.
 
@@ -108,6 +117,53 @@ Errors return `{"error": "…"}`:
 
 Logs record the slug, model, sizes, token counts and timing, never
 the message, draft or reply.
+
+## Sources
+
+The editor's Sources tab adds a source three ways. Each becomes one
+Markdown file under the project's `sources/`, which Transform and chat
+read as grounding.
+
+| Tab | Input | Needs |
+|---|---|---|
+| URL | A web page or a PDF link (up to 30 MB) | forager: `WRITER_FORAGER_URL`, `WRITER_FORAGER_TOKEN` |
+| Text | Pasted text (up to 256 KB; the first 64 KB goes to the model) | nothing extra |
+| PDF | An uploaded PDF (up to 30 MB) | nothing extra |
+
+You pick the model (`claude-best`, `claude-fast`, `openai-best`,
+`openai-fast`) and the depth (output budget: low 2K, medium 8K, high
+16K tokens; `claude-fast` is held to 8K and the file records
+`depth_clamped: true`). Pages and text give a summary and key points;
+PDFs are sent whole to the model, which also transcribes tables and
+charts. PDF reading needs a model that accepts PDF input through your
+gateway (Claude models do).
+
+A source file looks like this:
+
+```markdown
+---
+type: source
+project: my-piece
+kind: url | text | pdf
+added: 2026-11-21T15:04:05Z
+title: "…"
+url: "https://…"        (empty for text without a URL and for uploads)
+model_used: claude-best
+depth: medium
+---
+
+# Title
+
+Summary…
+
+## Key points
+## Tables     (PDFs, when present)
+## Charts     (PDFs, when present)
+```
+
+At most two sources are added at once (large PDFs are memory-heavy);
+a third gets "try again in a moment". Logs record the project, file
+name, kind, model, depth, sizes, tokens and timing, never the content.
 
 ## Folder layout
 

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/scheff-of-staff/scheff-writer/internal/forager"
 	"github.com/scheff-of-staff/scheff-writer/internal/llm"
 	"github.com/scheff-of-staff/scheff-writer/internal/store"
 	"github.com/scheff-of-staff/scheff-writer/internal/web"
@@ -74,6 +75,18 @@ func main() {
 		log.Print("JSON API on at /api/v1/ (WRITER_API_TOKEN set)")
 	}
 
+	var fetcher web.SourceFetcher
+	if u := os.Getenv("WRITER_FORAGER_URL"); u != "" {
+		tok := os.Getenv("WRITER_FORAGER_TOKEN")
+		if tok == "" {
+			log.Fatal("WRITER_FORAGER_URL is set but WRITER_FORAGER_TOKEN is empty")
+		}
+		fetcher = forager.New(u, tok)
+		log.Print("URL sources on (forager)")
+	} else {
+		log.Print("warn: WRITER_FORAGER_URL not set; adding sources by URL is off (text and PDF upload still work)")
+	}
+
 	h, err := web.New(web.Config{
 		Store:          st,
 		LLM:            model,
@@ -82,6 +95,8 @@ func main() {
 		InsecureCookie: os.Getenv("WRITER_INSECURE_COOKIE") == "1",
 		HomeURL:        os.Getenv("WRITER_HOME_URL"),
 		ProjectURL:     os.Getenv("WRITER_PROJECT_URL"),
+
+		Fetcher: fetcher,
 
 		APIToken:         apiToken,
 		APIModels:        apiModels,

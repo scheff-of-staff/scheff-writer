@@ -773,6 +773,7 @@
         .sources-add form.active { display: flex; }
         .sources-add input[type=url],
         .sources-add input[type=text],
+        .sources-add input[type=file],
         .sources-add textarea {
             font: inherit;
             font-size: 0.88rem;
@@ -1557,13 +1558,14 @@
                             </div>
                             {{end}}
                         {{else}}
-                            <div class="sources-empty">No sources attached. Add a URL (HTML page or PDF — PDFs include table and chart extraction) or paste text below. Sources are summarised and fed into Transform + Chat as grounding context.</div>
+                            <div class="sources-empty">No sources attached. Add a URL (HTML page or PDF), paste text, or upload a PDF below — PDFs include table and chart extraction. Sources are summarised and fed into Transform + Chat as grounding context.</div>
                         {{end}}
                     </div>
                     <div class="sources-add">
                         <div class="kind-tabs">
-                            <button type="button" class="kind-tab active" data-kind="url" title="Fetch a web page or PDF. HTML/text pages go to openai-fast for summary. PDFs are auto-detected (Content-Type or %PDF magic bytes) and routed to claude-best with native PDF reading — tables and charts are transcribed as Markdown into the source file. PDF ingest costs ~$0.10-0.20 per document.">URL</button>
-                            <button type="button" class="kind-tab" data-kind="text" title="Paste text directly. Same LLM extract → saved as a source file. Use this when a URL isn't available, but note: pasted PDF text loses charts and images.">Text</button>
+                            <button type="button" class="kind-tab active" data-kind="url" title="Fetch a web page or PDF (through forager, which refuses private and internal addresses). Pages: the extracted text goes to the model you pick. PDFs are detected by their content and sent whole to the model you pick — with claude-best, tables and charts are transcribed as Markdown into the source file (roughly $0.10–0.20 per PDF).">URL</button>
+                            <button type="button" class="kind-tab" data-kind="text" title="Paste text directly. Same extraction, saved as a source file. Use this when a page can't be fetched; pasted PDF text loses tables, charts and images.">Text</button>
+                            <button type="button" class="kind-tab" data-kind="pdf" title="Upload a PDF from your computer (up to 30 MB) — for documents that aren't on the web, like internal reports or drafts. Sent whole to the model you pick, same as a fetched PDF. The file itself isn't stored; only the extract is.">PDF</button>
                         </div>
                         {{define "model-depth-row"}}
                         <div class="model-depth-row">
@@ -1590,7 +1592,7 @@
                         <form class="active"
                               data-kind="url"
                               hx-post="/api/add-source"
-                              hx-target=".add-result"
+                              hx-target="find .add-result"
                               hx-swap="innerHTML"
                               hx-on::after-request="if (event.detail.successful) { this.querySelector('input[name=url]').value=''; this.querySelector('input[name=title]').value=''; }">
                             <input type="hidden" name="slug" value="{{.Slug}}">
@@ -1606,7 +1608,7 @@
                         </form>
                         <form data-kind="text"
                               hx-post="/api/add-source"
-                              hx-target=".add-result"
+                              hx-target="find .add-result"
                               hx-swap="innerHTML"
                               hx-on::after-request="if (event.detail.successful) { this.querySelector('textarea[name=text]').value=''; this.querySelector('input[name=title]').value=''; this.querySelector('input[name=url]').value=''; }">
                             <input type="hidden" name="slug" value="{{.Slug}}">
@@ -1618,6 +1620,23 @@
                             <div style="display:flex; align-items:center; gap: var(--space-3);">
                                 <button type="submit" class="add">Summarise &amp; add</button>
                                 <span class="add-thinking">summarising…</span>
+                                <span class="add-result"></span>
+                            </div>
+                        </form>
+                        <form data-kind="pdf"
+                              hx-post="/api/add-source"
+                              hx-encoding="multipart/form-data"
+                              hx-target="find .add-result"
+                              hx-swap="innerHTML"
+                              hx-on::after-request="if (event.detail.successful) { this.querySelector('input[name=pdf]').value=''; this.querySelector('input[name=title]').value=''; }">
+                            <input type="hidden" name="slug" value="{{.Slug}}">
+                            <input type="hidden" name="kind" value="pdf">
+                            <input type="file" name="pdf" accept="application/pdf,.pdf" required title="A PDF up to 30 MB. Only the extract is saved, not the file.">
+                            <input type="text" name="title" placeholder="Optional title (overrides what the LLM extracts)" maxlength="120">
+                            {{template "model-depth-row" .}}
+                            <div style="display:flex; align-items:center; gap: var(--space-3);">
+                                <button type="submit" class="add">Upload &amp; summarise</button>
+                                <span class="add-thinking">uploading + summarising… (large PDFs take a minute or two)</span>
                                 <span class="add-result"></span>
                             </div>
                         </form>
